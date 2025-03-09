@@ -1,13 +1,13 @@
-$ORIGIN cp-planta.example.com.
+$ORIGIN cp-planta.saccilotto.com.
 $TTL 3600
-@       IN      SOA     ns1.cp-planta.example.com. admin.cp-planta.example.com. (
+@       IN      SOA     ns1.cp-planta.saccilotto.com. admin.cp-planta.saccilotto.com. (
                         2023031500      ; serial
                         3600            ; refresh
                         1800            ; retry
                         604800          ; expire
                         86400           ; minimum
 )
-                IN      NS      ns1.cp-planta.example.com.
+                IN      NS      ns1.cp-planta.saccilotto.com.
                 IN      A       10.0.1.10  ; Replace with your manager node IP
 
 ns1             IN      A       10.0.1.10  ; Replace with your manager node IP

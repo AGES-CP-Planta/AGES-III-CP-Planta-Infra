@@ -5,7 +5,7 @@ This repository contains Infrastructure as Code (IaC) for deploying and configur
 ## Project Structure
 
 ```plaintext
-CP-Planta-Infra/
+AGES-III-CP-Planta-Infra/
 ├── ssh_keys/               # Generated SSH keys (gitignored)
 ├── Swarm/
 │   ├── ansible.cfg         # Ansible configuration for Swarm setup
@@ -49,8 +49,8 @@ CP-Planta-Infra/
 1. Clone this repository:
 
    ```plaintext
-   git clone https://github.com/Saccilotto/CP-Planta-Infra.git
-   cd CP-Planta-Infra
+   git clone https://github.com/Saccilotto/AGES-III-CP-Planta-Infra.git
+   cd AGES-III-CP-Planta-Infra
    ```
 
 2. Create `.env` file from the example:

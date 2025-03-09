@@ -110,7 +110,7 @@ services:
         condition: any
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.backend.rule=Host(`api.cp-planta.example.com`)"
+        - "traefik.http.routers.backend.rule=Host(`api.cp-planta.saccilotto.com`)"
         - "traefik.http.routers.backend.entrypoints=websecure"
         - "traefik.http.routers.backend.tls.certresolver=myresolver"
         - "traefik.http.services.backend.loadbalancer.server.port=3000"
@@ -133,7 +133,7 @@ services:
         condition: any
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.pgadmin.rule=Host(`pgadmin.cp-planta.example.com`)"
+        - "traefik.http.routers.pgadmin.rule=Host(`pgadmin.cp-planta.saccilotto.com`)"
         - "traefik.http.routers.pgadmin.entrypoints=websecure"
         - "traefik.http.routers.pgadmin.tls.certresolver=myresolver"
         - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
@@ -145,7 +145,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - API_URL=https://api.cp-planta.example.com
+      - API_URL=https://api.cp-planta.saccilotto.com
     networks:
       - frontend_network
       - traefik_network
@@ -155,7 +155,7 @@ services:
         condition: any
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.frontend.rule=Host(`cp-planta.example.com`)"
+        - "traefik.http.routers.frontend.rule=Host(`cp-planta.saccilotto.com`)"
         - "traefik.http.routers.frontend.entrypoints=websecure"
         - "traefik.http.routers.frontend.tls.certresolver=myresolver"
         - "traefik.http.services.frontend.loadbalancer.server.port=3001"

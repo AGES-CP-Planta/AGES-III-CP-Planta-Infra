@@ -32,7 +32,7 @@ variable "instance_names" {
 }
 
 variable "username" {
-  default = "adminuser"
+  default = "ubuntu"
 }
 
 variable "instance_type" {

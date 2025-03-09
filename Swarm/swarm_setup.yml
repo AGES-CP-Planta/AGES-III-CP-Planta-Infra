@@ -2,8 +2,8 @@
   hosts: all
   become: yes
   vars:
-    manager_node: "{{ groups['CPPlanta1'][0] }}"
-    first_worker: "{{ groups['CPPlanta2'][0] }}"
+    manager_node: "{{ groups['instance1'][0] }}"
+    first_worker: "{{ groups['instance2'][0] }}"
     ansible_python_interpreter: /usr/bin/python3
 
   tasks:
@@ -75,6 +75,7 @@
         append: yes
       loop:
         - "{{ ansible_ssh_user }}"
+      ignore_errors: yes
 
     - name: Ensure Docker service is running
       systemd:
@@ -83,32 +84,33 @@
         enabled: true
       become: yes
 
-    - name: Check if node is already part of a Swarm
-      docker_swarm_info:
-      register: swarm_info
-      when: inventory_hostname == manager_node
-
-    - name: Initialize Swarm on manager
+    # Handle swarm initialization for the manager node
+    - name: Initialize Swarm on manager node
       docker_swarm:
         state: present
         advertise_addr: "{{ ansible_host }}"
       when: inventory_hostname == manager_node
+      register: swarm_init
+      ignore_errors: no
 
-    - name: Get Swarm join tokens from manager
+    # Only run the following on the manager after swarm init is successful
+    - name: Get swarm join tokens
       docker_swarm_info:
       register: swarm_info
-      delegate_to: "{{ manager_node }}"
-      run_once: true
-
+      when: inventory_hostname == manager_node and swarm_init is defined and swarm_init.changed
+      
+    # Join workers to swarm (only run on workers)
     - name: Join workers to Swarm
       docker_swarm:
         state: present
-        join_token: "{{ swarm_info.swarm_facts.JoinTokens.Worker }}"
+        join_token: "{{ hostvars[manager_node]['swarm_info']['swarm_facts']['JoinTokens']['Worker'] }}"
         remote_addrs:
-          - "{{ groups['CPPlanta1'][0] }}"
+          - "{{ hostvars[manager_node]['ansible_host'] }}"
       when:
         - inventory_hostname != manager_node
-        - swarm_info.docker_swarm_active == false  
+        - hostvars[manager_node]['swarm_info'] is defined
+        - hostvars[manager_node]['swarm_info']['swarm_facts'] is defined
+      ignore_errors: yes
 
     - name: Copy stack.yml to manager
       copy:
