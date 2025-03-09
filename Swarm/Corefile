@@ -1,0 +1,17 @@
+.:53 {
+    forward . 8.8.8.8 8.8.4.4
+    log
+    errors
+}
+
+cp-planta.example.com:53 {
+    file /etc/coredns/zones/cp-planta.example.com.db
+    log
+    errors
+}
+
+1.0.10.in-addr.arpa:53 {
+    file /etc/coredns/zones/1.0.10.in-addr.arpa.db
+    log
+    errors
+}

@@ -1,0 +1,4 @@
+# PostgreSQL configuration for replica server
+listen_addresses = '*'
+hot_standby = on
+primary_conninfo = 'host={{ primary_host }} port=5432 user={{ replication_user }} password={{ replication_password }}'

@@ -9,7 +9,7 @@ services:
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
-      - "--certificatesresolvers.myresolver.acme.email=admin@example.com"
+      - "--certificatesresolvers.myresolver.acme.email={{ acme_email }}"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
     ports:
       - "80:80"
@@ -25,19 +25,24 @@ services:
           - node.role == manager
       labels:
         - "traefik.enable=true"
+    environment:
+      - REGION=secondary
+      - PEER_REGION={{ peer_region_host }}
 
-  postgres_primary:
+  postgres_replica:
     image: norohim/postgres-optimal:latest
     environment:
-      - ROLE=primary
+      - ROLE=replica
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=postgres
-      - NODE_ID=1
-      - NODE_NAME=primary
-      - NODE_HOST=postgres_primary
+      - NODE_ID=3
+      - NODE_NAME=dr_replica
+      - NODE_HOST=postgres_replica
+      - REPLICATE_FROM={{ peer_region_host }}
+      - REGION=secondary
     volumes:
-      - primary_data:/var/lib/postgresql/data
+      - replica_data:/var/lib/postgresql/data
     networks:
       - backend_network
     deploy:
@@ -49,37 +54,12 @@ services:
     ports:
       - "5432:5432"
 
-  postgres_replica:
-    image: norohim/postgres-optimal:latest
-    environment:
-      - ROLE=replica
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=postgres
-      - NODE_ID=2
-      - NODE_NAME=replica1
-      - NODE_HOST=postgres_replica
-      - REPLICATE_FROM=postgres_primary
-    volumes:
-      - replica_data:/var/lib/postgresql/data
-    networks:
-      - backend_network
-    depends_on:
-      - postgres_primary
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: any
-      labels:
-        - "traefik.enable=false"
-    ports:
-      - "5433:5432"
-
   pgbouncer:
     image: norohim/pgbouncer:latest
     environment:
       - DB_USER=postgres
       - DB_PASSWORD=postgres
+      - REGION=secondary
     networks:
       - backend_network
     deploy:
@@ -101,6 +81,9 @@ services:
       - DB_PASSWORD=postgres
       - DB_NAME=postgres
       - DATABASE_URL=postgresql://postgres:postgres@pgbouncer:6432/postgres
+      - REGION=secondary
+      - PEER_REGION_HOST={{ peer_region_host }}
+      - PEER_REGION_PORT=3000
     networks:
       - backend_network
       - traefik_network
@@ -110,20 +93,19 @@ services:
         condition: any
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.backend.rule=Host(`api.cp-planta.example.com`)"
-        - "traefik.http.routers.backend.entrypoints=websecure"
-        - "traefik.http.routers.backend.tls.certresolver=myresolver"
-        - "traefik.http.services.backend.loadbalancer.server.port=3000"
+        - "traefik.http.routers.backend-secondary.rule=Host(`api-dr.{{ domain_name }}`)"
+        - "traefik.http.routers.backend-secondary.entrypoints=websecure"
+        - "traefik.http.routers.backend-secondary.tls.certresolver=myresolver"
+        - "traefik.http.services.backend-secondary.loadbalancer.server.port=3000"
     ports:
       - "3000:3000"
         
   pgadmin:
     image: norohim/pgadmin:latest
     environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@example.com
-      - PGADMIN_DEFAULT_PASSWORD=SecurePassword123
-    depends_on:
-      - postgres_primary
+      - PGADMIN_DEFAULT_EMAIL={{ pgadmin_email }}
+      - PGADMIN_DEFAULT_PASSWORD={{ pgadmin_password }}
+      - REGION=secondary
     networks:
       - backend_network
       - traefik_network
@@ -133,10 +115,10 @@ services:
         condition: any
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.pgadmin.rule=Host(`pgadmin.cp-planta.example.com`)"
-        - "traefik.http.routers.pgadmin.entrypoints=websecure"
-        - "traefik.http.routers.pgadmin.tls.certresolver=myresolver"
-        - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
+        - "traefik.http.routers.pgadmin-secondary.rule=Host(`pgadmin-dr.{{ domain_name }}`)"
+        - "traefik.http.routers.pgadmin-secondary.entrypoints=websecure"
+        - "traefik.http.routers.pgadmin-secondary.tls.certresolver=myresolver"
+        - "traefik.http.services.pgadmin-secondary.loadbalancer.server.port=80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin 
 
@@ -145,7 +127,8 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - API_URL=https://api.cp-planta.example.com
+      - API_URL=https://api-dr.{{ domain_name }}
+      - REGION=secondary
     networks:
       - frontend_network
       - traefik_network
@@ -155,10 +138,10 @@ services:
         condition: any
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.frontend.rule=Host(`cp-planta.example.com`)"
-        - "traefik.http.routers.frontend.entrypoints=websecure"
-        - "traefik.http.routers.frontend.tls.certresolver=myresolver"
-        - "traefik.http.services.frontend.loadbalancer.server.port=3001"
+        - "traefik.http.routers.frontend-secondary.rule=Host(`dr.{{ domain_name }}`)"
+        - "traefik.http.routers.frontend-secondary.entrypoints=websecure"
+        - "traefik.http.routers.frontend-secondary.tls.certresolver=myresolver"
+        - "traefik.http.services.frontend-secondary.loadbalancer.server.port=3001"
 
   dns:
     image: coredns/coredns:1.9.3
@@ -189,8 +172,6 @@ networks:
     driver: overlay
 
 volumes:
-  primary_data:
-    driver: local
   replica_data:
     driver: local
   pgadmin_data:

@@ -1,0 +1,34 @@
+# Terraform files
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+
+# Ansible files
+*.retry
+
+# SSH keys
+ssh_keys/
+
+# Environment variables
+.env
+
+# Generated inventory files
+static_ip.ini
+multi_region_inventory.ini
+
+# Logs
+*.log
+
+# Ignore any temporary files
+*.tmp
+*.swp
+*.bak
+
+# Ignore any compiled files
+*.out
+*.o
+*.class
+
+# Ignore any Docker related files
+docker-compose.override.yml

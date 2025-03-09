@@ -1,0 +1,20 @@
+$ORIGIN {{ reverse_zone }}.
+$TTL 3600
+@       IN      SOA     ns1.{{ domain_name }}. admin.{{ domain_name }}. (
+                        2023031501      ; serial
+                        3600            ; refresh
+                        1800            ; retry
+                        604800          ; expire
+                        86400           ; minimum
+)
+                IN      NS      ns1.{{ domain_name }}.
+
+; Extract the last octet from IP addresses
+{% set primary_ip_parts = primary_manager_ip.split('.') %}
+{% set secondary_ip_parts = secondary_manager_ip.split('.') %}
+
+; Primary region IP
+{{ primary_ip_parts[3] }}  IN      PTR     primary.{{ domain_name }}.
+
+; Secondary region IP
+{{ secondary_ip_parts[3] }}  IN      PTR     secondary.{{ domain_name }}.

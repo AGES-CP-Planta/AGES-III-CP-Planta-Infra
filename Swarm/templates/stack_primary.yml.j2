@@ -9,7 +9,7 @@ services:
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
-      - "--certificatesresolvers.myresolver.acme.email=admin@example.com"
+      - "--certificatesresolvers.myresolver.acme.email={{ acme_email }}"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
     ports:
       - "80:80"
@@ -25,6 +25,9 @@ services:
           - node.role == manager
       labels:
         - "traefik.enable=true"
+    environment:
+      - REGION=primary
+      - PEER_REGION={{ peer_region_host }}
 
   postgres_primary:
     image: norohim/postgres-optimal:latest
@@ -36,6 +39,8 @@ services:
       - NODE_ID=1
       - NODE_NAME=primary
       - NODE_HOST=postgres_primary
+      - REGION=primary
+      - PEER_REGION_HOST={{ peer_region_host }}
     volumes:
       - primary_data:/var/lib/postgresql/data
     networks:
@@ -60,6 +65,7 @@ services:
       - NODE_NAME=replica1
       - NODE_HOST=postgres_replica
       - REPLICATE_FROM=postgres_primary
+      - REGION=primary
     volumes:
       - replica_data:/var/lib/postgresql/data
     networks:
@@ -80,6 +86,7 @@ services:
     environment:
       - DB_USER=postgres
       - DB_PASSWORD=postgres
+      - REGION=primary
     networks:
       - backend_network
     deploy:
@@ -101,6 +108,9 @@ services:
       - DB_PASSWORD=postgres
       - DB_NAME=postgres
       - DATABASE_URL=postgresql://postgres:postgres@pgbouncer:6432/postgres
+      - REGION=primary
+      - PEER_REGION_HOST={{ peer_region_host }}
+      - PEER_REGION_PORT=3000
     networks:
       - backend_network
       - traefik_network
@@ -110,18 +120,19 @@ services:
         condition: any
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.backend.rule=Host(`api.cp-planta.example.com`)"
-        - "traefik.http.routers.backend.entrypoints=websecure"
-        - "traefik.http.routers.backend.tls.certresolver=myresolver"
-        - "traefik.http.services.backend.loadbalancer.server.port=3000"
+        - "traefik.http.routers.backend-primary.rule=Host(`api.{{ domain_name }}`)"
+        - "traefik.http.routers.backend-primary.entrypoints=websecure"
+        - "traefik.http.routers.backend-primary.tls.certresolver=myresolver"
+        - "traefik.http.services.backend-primary.loadbalancer.server.port=3000"
     ports:
       - "3000:3000"
         
   pgadmin:
     image: norohim/pgadmin:latest
     environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@example.com
-      - PGADMIN_DEFAULT_PASSWORD=SecurePassword123
+      - PGADMIN_DEFAULT_EMAIL={{ pgadmin_email }}
+      - PGADMIN_DEFAULT_PASSWORD={{ pgadmin_password }}
+      - REGION=primary
     depends_on:
       - postgres_primary
     networks:
@@ -133,10 +144,10 @@ services:
         condition: any
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.pgadmin.rule=Host(`pgadmin.cp-planta.example.com`)"
-        - "traefik.http.routers.pgadmin.entrypoints=websecure"
-        - "traefik.http.routers.pgadmin.tls.certresolver=myresolver"
-        - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
+        - "traefik.http.routers.pgadmin-primary.rule=Host(`pgadmin.{{ domain_name }}`)"
+        - "traefik.http.routers.pgadmin-primary.entrypoints=websecure"
+        - "traefik.http.routers.pgadmin-primary.tls.certresolver=myresolver"
+        - "traefik.http.services.pgadmin-primary.loadbalancer.server.port=80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin 
 
@@ -145,7 +156,8 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - API_URL=https://api.cp-planta.example.com
+      - API_URL=https://api.{{ domain_name }}
+      - REGION=primary
     networks:
       - frontend_network
       - traefik_network
@@ -155,10 +167,10 @@ services:
         condition: any
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.frontend.rule=Host(`cp-planta.example.com`)"
-        - "traefik.http.routers.frontend.entrypoints=websecure"
-        - "traefik.http.routers.frontend.tls.certresolver=myresolver"
-        - "traefik.http.services.frontend.loadbalancer.server.port=3001"
+        - "traefik.http.routers.frontend-primary.rule=Host(`{{ domain_name }}`)"
+        - "traefik.http.routers.frontend-primary.entrypoints=websecure"
+        - "traefik.http.routers.frontend-primary.tls.certresolver=myresolver"
+        - "traefik.http.services.frontend-primary.loadbalancer.server.port=3001"
 
   dns:
     image: coredns/coredns:1.9.3

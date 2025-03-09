@@ -1,0 +1,22 @@
+$ORIGIN cp-planta.example.com.
+$TTL 3600
+@       IN      SOA     ns1.cp-planta.example.com. admin.cp-planta.example.com. (
+                        2023031500      ; serial
+                        3600            ; refresh
+                        1800            ; retry
+                        604800          ; expire
+                        86400           ; minimum
+)
+                IN      NS      ns1.cp-planta.example.com.
+                IN      A       10.0.1.10  ; Replace with your manager node IP
+
+ns1             IN      A       10.0.1.10  ; Replace with your manager node IP
+www             IN      A       10.0.1.10
+api             IN      A       10.0.1.10
+pgadmin         IN      A       10.0.1.10
+
+; Backend services (internal)
+postgres        IN      A       10.0.1.10
+pgbouncer       IN      A       10.0.1.10
+backend         IN      A       10.0.1.10
+frontend        IN      A       10.0.1.10

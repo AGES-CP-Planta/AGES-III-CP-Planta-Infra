@@ -6,9 +6,6 @@ This repository contains Infrastructure as Code (IaC) for deploying and configur
 
 ```plaintext
 CP-Planta-Infra/
-├── Configuration/
-│   ├── ansible.cfg         # Ansible configuration for additional setup
-│   └── runners.yml         # GitLab runners configuration playbook
 ├── ssh_keys/               # Generated SSH keys (gitignored)
 ├── Swarm/
 │   ├── ansible.cfg         # Ansible configuration for Swarm setup

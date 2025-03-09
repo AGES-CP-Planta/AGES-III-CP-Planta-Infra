@@ -75,7 +75,6 @@
         append: yes
       loop:
         - "{{ ansible_ssh_user }}"
-        - gitlab-runner
 
     - name: Ensure Docker service is running
       systemd:
@@ -125,7 +124,7 @@
       delegate_to: "{{ manager_node }}"
       run_once: true
 
-    - name: Update non-runner services (force update)
+    - name: Update services (force update)
       shell: |
         docker service update --force {{ item }}
       loop:

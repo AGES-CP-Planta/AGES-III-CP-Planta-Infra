@@ -141,46 +141,10 @@ resource "azurerm_network_security_group" "nsg" {
     destination_address_prefix = "*"
   }
 
-  security_rule {
-    name                       = "allow-gitlab-runner-ssh"
-    priority                   = 180
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "22"
-    source_address_prefix      = "*"
-    destination_address_prefix = "*"
-  }
-
-  security_rule {
-    name                       = "allow-gitlab-runner-http"
-    priority                   = 190
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "80"
-    source_address_prefix      = "*"
-    destination_address_prefix = "*"
-  }
-
-  security_rule {
-    name                       = "allow-gitlab-runner-https"
-    priority                   = 200
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "443"
-    source_address_prefix      = "*"
-    destination_address_prefix = "*"
-  }
-  
   # Outbound rules
   security_rule {
     name                       = "allow-backend-nodejsOut"
-    priority                   = 210
+    priority                   = 180
     direction                  = "Outbound"
     access                     = "Allow"
     protocol                   = "Tcp"
@@ -192,7 +156,7 @@ resource "azurerm_network_security_group" "nsg" {
 
   security_rule {
     name                       = "allow-frontend-nodejsOut"
-    priority                   = 220
+    priority                   = 190
     direction                  = "Outbound"
     access                     = "Allow"
     protocol                   = "Tcp"
@@ -204,7 +168,7 @@ resource "azurerm_network_security_group" "nsg" {
 
   security_rule {
     name                       = "allow-pgadmin2"
-    priority                   = 230
+    priority                   = 200
     direction                  = "Outbound"
     access                     = "Allow"
     protocol                   = "Tcp"
@@ -216,7 +180,7 @@ resource "azurerm_network_security_group" "nsg" {
 
   security_rule {
     name                       = "allow-pgadmin-https2"
-    priority                   = 240
+    priority                   = 210
     direction                  = "Outbound"
     access                     = "Allow"
     protocol                   = "Tcp"
