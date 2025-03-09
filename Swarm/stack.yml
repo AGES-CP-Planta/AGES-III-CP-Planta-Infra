@@ -1,0 +1,149 @@
+services:
+  postgres_primary:
+    image: norohim/postgres-optimal:latest
+    environment:
+      - ROLE=primary
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+      - NODE_ID=1
+      - NODE_NAME=primary
+      - NODE_HOST=postgres_primary
+    volumes:
+      - primary_data:/var/lib/postgresql/data
+    networks:
+      - backend_network
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+    ports:
+      - "5432:5432"
+
+  postgres_replica:
+    image: norohim/postgres-optimal:latest
+    environment:
+      - ROLE=replica
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+      - NODE_ID=2
+      - NODE_NAME=replica1
+      - NODE_HOST=postgres_replica
+      - REPLICATE_FROM=postgres_primary
+    volumes:
+      - replica_data:/var/lib/postgresql/data
+    networks:
+      - backend_network
+    depends_on:
+      - postgres_primary
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+    ports:
+      - "5433:5432"
+
+  pgbouncer:
+    image: norohim/pgbouncer:latest
+    environment:
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+    networks:
+      - backend_network
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+    ports:
+      - "6432:6432"
+
+  backend:
+    image: norohim/cp-planta-backend:latest
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=pgbouncer
+      - DB_PORT=6432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=postgres
+      - DATABASE_URL=postgresql://postgres:postgres@pgbouncer:6432/postgres
+    networks:
+      - backend_network
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+    ports:
+      - "3000:3000"
+        
+  pgadmin:
+    image: norohim/pgadmin:latest
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=fulano@gmail.com
+      - PGADMIN_DEFAULT_PASSWORD=abc123
+    depends_on:
+      - postgres_primary
+    networks:
+      - backend_network
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+    ports: 
+      - "80:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin 
+
+  frontend:
+    image: norohim/cp-planta-frontend:latest
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+    networks:
+      - frontend_network
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+    ports:
+      - "3001:3001"
+
+  runners:
+    image: gitlab/gitlab-runner:latest
+    environment:
+      - CI_SERVER_URL=${CI_SERVER_URL}
+      - RUNNER_TOKEN=${RUNNER_TOKEN}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /srv/gitlab-runner/config:/etc/gitlab-runner
+    networks:
+      - runner_network
+    deploy:
+      mode: replicated
+      replicas: 3
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: "1.25G"
+        reservations:
+          cpus: "0.25"
+          memory: "0.50G"
+      restart_policy:
+        condition: any
+
+networks:
+  backend_network:
+    driver: overlay
+  frontend_network:
+    driver: overlay
+  runner_network:
+    driver: overlay
+
+volumes:
+  primary_data:
+    driver: local
+  replica_data:
+    driver: local
+  pgadmin_data:
+    driver: local

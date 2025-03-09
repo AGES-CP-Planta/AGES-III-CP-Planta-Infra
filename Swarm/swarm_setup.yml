@@ -1,0 +1,167 @@
+- name: Configure the Docker Swarm Cluster
+  hosts: all
+  become: yes
+  vars:
+    manager_node: "{{ groups['CPPlanta1'][0] }}"
+    first_worker: "{{ groups['CPPlanta2'][0] }}"
+    ansible_python_interpreter: /usr/bin/python3
+
+  tasks:
+    - name: Remove old Docker versions
+      apt:
+        name:
+          - docker
+          - docker-engine
+          - docker.io
+          - containerd
+          - runc
+        state: absent
+        update_cache: yes
+      become: yes
+
+    - name: Install dependencies
+      apt:
+        name:
+          - curl
+          - ca-certificates
+          - git
+          - acl
+          - python3
+          - python3-pip
+          - lsb-release
+        state: present
+        update_cache: yes
+      become: yes
+
+    - name: Add Docker's official GPG key and save it in the recommended keyring
+      ansible.builtin.shell: |
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+      become: yes
+      args:
+        creates: /usr/share/keyrings/docker-archive-keyring.gpg
+      ignore_errors: yes
+
+    - name: Add Docker's repository
+      ansible.builtin.shell: |
+        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu jammy stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+      become: yes
+      ignore_errors: yes
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+      become: yes
+
+    - name: Install Docker packages
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+        update_cache: yes
+      become: yes
+
+    - name: Install Docker SDK for Python
+      apt:
+        name: python3-docker
+        state: present
+      become: yes
+
+    - name: Add users to the Docker group
+      user:
+        name: "{{ item }}"
+        groups: docker
+        append: yes
+      loop:
+        - "{{ ansible_ssh_user }}"
+        - gitlab-runner
+
+    - name: Ensure Docker service is running
+      systemd:
+        name: docker
+        state: started
+        enabled: true
+      become: yes
+
+    - name: Check if node is already part of a Swarm
+      docker_swarm_info:
+      register: swarm_info
+      when: inventory_hostname == manager_node
+
+    - name: Initialize Swarm on manager
+      docker_swarm:
+        state: present
+        advertise_addr: "{{ ansible_host }}"
+      when: inventory_hostname == manager_node
+
+    - name: Get Swarm join tokens from manager
+      docker_swarm_info:
+      register: swarm_info
+      delegate_to: "{{ manager_node }}"
+      run_once: true
+
+    - name: Join workers to Swarm
+      docker_swarm:
+        state: present
+        join_token: "{{ swarm_info.swarm_facts.JoinTokens.Worker }}"
+        remote_addrs:
+          - "{{ groups['CPPlanta1'][0] }}"
+      when:
+        - inventory_hostname != manager_node
+        - swarm_info.docker_swarm_active == false  
+
+    - name: Copy stack.yml to manager
+      copy:
+        src: ./stack.yml
+        dest: /home/{{ ansible_ssh_user }}/stack.yml
+      delegate_to: "{{ manager_node }}"
+      run_once: true 
+
+    - name: Deploy the stack on manager (with force update)
+      shell: docker stack deploy --with-registry-auth --resolve-image always -c /home/{{ ansible_ssh_user }}/stack.yml CP-Planta
+      args:
+        chdir: /home/{{ ansible_ssh_user }}
+      delegate_to: "{{ manager_node }}"
+      run_once: true
+
+    - name: Update non-runner services (force update)
+      shell: |
+        docker service update --force {{ item }}
+      loop:
+        - CP-Planta_backend
+        - CP-Planta_frontend
+        - CP-Planta_postgres_primary
+        - CP-Planta_postgres_replica 
+        - CP-Planta_pgadmin           
+        - CP-Planta_pgbouncer 
+      delegate_to: "{{ manager_node }}"
+      run_once: true
+      async: 75  
+      poll: 0   
+
+    - name: Wait for services to stabilize
+      retries: 10
+      delay: 5
+      shell: |
+        running_services=$(docker service ls --filter "desired-state=running" --filter "replicas=0" -q)
+        if [ -n "$running_services" ]; then
+          exit 1
+        fi
+      delegate_to: "{{ manager_node }}"
+      register: service_check
+      until: service_check.rc == 0
+
+    - name: Wait for 25 seconds to show proper service status
+      wait_for:
+        timeout: 25
+
+    - name: Show service status
+      command: docker service ls
+      delegate_to: "{{ manager_node }}"
+      run_once: true
+      register: service_status
+    
+    - name: Display service status
+      debug:
+        var: service_status.stdout_lines
