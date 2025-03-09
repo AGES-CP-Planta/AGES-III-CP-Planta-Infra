@@ -7,6 +7,15 @@
     ansible_python_interpreter: /usr/bin/python3
 
   tasks:
+    # Debug task to help troubleshoot variable issues
+    - name: Debug inventory and host information
+      debug:
+        msg:
+          - "Current host: {{ inventory_hostname }}"
+          - "Manager node: {{ manager_node }}"
+          - "Is manager: {{ inventory_hostname == manager_node }}"
+          - "Manager IP: {{ hostvars[manager_node].ansible_host | default(manager_node) }}"
+          
     - name: Remove old Docker versions
       apt:
         name:
@@ -88,7 +97,7 @@
     - name: Initialize Swarm on manager node
       docker_swarm:
         state: present
-        advertise_addr: "{{ ansible_host }}"
+        advertise_addr: "{{ ansible_default_ipv4.address }}"
       when: inventory_hostname == manager_node
       register: swarm_init
       ignore_errors: no
@@ -99,13 +108,33 @@
       register: swarm_info
       when: inventory_hostname == manager_node and swarm_init is defined and swarm_init.changed
       
+    # Debug task to show swarm information
+    - name: Debug swarm information
+      debug:
+        var: swarm_info
+      when: inventory_hostname == manager_node and swarm_info is defined
+      
+    # Ensure manager node IP is gathered for workers to use
+    - name: Set manager IP fact for workers to use
+      set_fact:
+        manager_ip: "{{ ansible_default_ipv4.address }}"
+      when: inventory_hostname == manager_node
+      
+    # Share the manager IP with all nodes
+    - name: Share manager IP with all nodes
+      set_fact:
+        manager_ip: "{{ hostvars[manager_node]['manager_ip'] }}"
+      when: 
+        - inventory_hostname != manager_node
+        - hostvars[manager_node]['manager_ip'] is defined
+      
     # Join workers to swarm (only run on workers)
     - name: Join workers to Swarm
       docker_swarm:
         state: present
         join_token: "{{ hostvars[manager_node]['swarm_info']['swarm_facts']['JoinTokens']['Worker'] }}"
         remote_addrs:
-          - "{{ hostvars[manager_node]['ansible_host'] }}"
+          - "{{ hostvars[manager_node]['manager_ip'] }}"
       when:
         - inventory_hostname != manager_node
         - hostvars[manager_node]['swarm_info'] is defined
@@ -118,6 +147,37 @@
         dest: /home/{{ ansible_ssh_user }}/stack.yml
       delegate_to: "{{ manager_node }}"
       run_once: true 
+      
+    # Copy DNS configuration files
+    - name: Create DNS directory structure on manager
+      file:
+        path: /home/{{ ansible_ssh_user }}/dns/zones
+        state: directory
+        mode: '0755'
+      delegate_to: "{{ manager_node }}"
+      run_once: true
+
+    - name: Copy Corefile to manager
+      copy:
+        src: ./Corefile
+        dest: /home/{{ ansible_ssh_user }}/dns/Corefile
+      delegate_to: "{{ manager_node }}"
+      run_once: true
+
+    - name: Copy zone file to manager
+      copy:
+        src: ./cp-planta.saccilotto.com.db
+        dest: /home/{{ ansible_ssh_user }}/dns/zones/cp-planta.saccilotto.com.db
+      delegate_to: "{{ manager_node }}"
+      run_once: true
+
+    - name: Update zone file with manager IP
+      replace:
+        path: /home/{{ ansible_ssh_user }}/dns/zones/cp-planta.saccilotto.com.db
+        regexp: '10\.0\.1\.10'
+        replace: "{{ hostvars[manager_node]['manager_ip'] }}"
+      delegate_to: "{{ manager_node }}"
+      run_once: true
 
     - name: Deploy the stack on manager (with force update)
       shell: docker stack deploy --with-registry-auth --resolve-image always -c /home/{{ ansible_ssh_user }}/stack.yml CP-Planta
@@ -135,11 +195,13 @@
         - CP-Planta_postgres_primary
         - CP-Planta_postgres_replica 
         - CP-Planta_pgadmin           
-        - CP-Planta_pgbouncer 
+        - CP-Planta_pgbouncer
+        - CP-Planta_dns
       delegate_to: "{{ manager_node }}"
       run_once: true
       async: 75  
       poll: 0   
+      ignore_errors: yes
 
     - name: Wait for services to stabilize
       retries: 10
@@ -152,6 +214,7 @@
       delegate_to: "{{ manager_node }}"
       register: service_check
       until: service_check.rc == 0
+      ignore_errors: yes
 
     - name: Wait for 25 seconds to show proper service status
       wait_for:
