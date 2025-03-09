@@ -10,7 +10,7 @@ function show_help {
     echo "  -r, --regions     Specify region mode (single or multi), default: single"
     echo "  -h, --help        Show this help message"
     echo ""
-    echo "Example: ./deploy.sh --provider azure --regions multi"
+    echo "Example: ./deploy.sh --provider aws --regions multi"
 }
 
 # Default values
@@ -55,7 +55,11 @@ echo "Selected provider: $PROVIDER, Regions: $REGIONS"
 echo "Running Terraform for $PROVIDER..."
 
 if [[ "$PROVIDER" == "aws" ]]; then
-    cd TerraformAWS
+    if [[ "$REGIONS" == "single" ]]; then
+        cd SimpleTerraformAWS
+    else
+        cd TerraformAWS
+    fi
     terraform init
     terraform apply -auto-approve
 elif [[ "$PROVIDER" == "azure" ]]; then
