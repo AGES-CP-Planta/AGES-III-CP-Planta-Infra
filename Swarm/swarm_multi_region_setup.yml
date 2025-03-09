@@ -7,10 +7,10 @@
     ansible_python_interpreter: /usr/bin/python3
     region_role: primary
     stack_name: CP-Planta-Primary
-    domain_name: "cp-planta.example.com"  # Replace with your actual domain
+    domain_name: "cp-planta.saccilotto.com"  # Replace with your actual domain
     reverse_zone: "1.0.10.in-addr.arpa"   # Adjust based on your subnet
-    acme_email: "admin@example.com"       # Replace with your email
-    pgadmin_email: "admin@example.com"    # Replace with your email
+    acme_email: "saccilotto.andre@gmail.com"       # Replace with your email
+    pgadmin_email: "saccilotto.andre@gmail.com"    # Replace with your email
     pgadmin_password: "SecurePassword123" # Use a secure password
     primary_manager: "{{ groups['primary_region'][0] }}"
     secondary_manager: "{{ groups['secondary_region'][0] }}"
@@ -223,10 +223,10 @@
     ansible_python_interpreter: /usr/bin/python3
     region_role: secondary
     stack_name: CP-Planta-Secondary
-    domain_name: "cp-planta.example.com"  # Replace with your actual domain
+    domain_name: "cp-planta.saccilotto.com"  # Replace with your actual domain
     reverse_zone: "1.0.10.in-addr.arpa"   # Adjust based on your subnet
-    acme_email: "admin@example.com"       # Replace with your email
-    pgadmin_email: "admin@example.com"    # Replace with your email
+    acme_email: "sacilotto.andre@gmail.com"       # Replace with your email
+    pgadmin_email: "sacilotto.andre@gmail.com"    # Replace with your email
     pgadmin_password: "SecurePassword123" # Use a secure password
 
   tasks:

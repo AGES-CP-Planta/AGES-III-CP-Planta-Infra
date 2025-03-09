@@ -4,8 +4,8 @@
     errors
 }
 
-cp-planta.example.com:53 {
-    file /etc/coredns/zones/cp-planta.example.com.db
+cp-planta.saccilotto.com:53 {
+    file /etc/coredns/zones/cp-planta.saccilotto.com.db
     log
     errors
 }
