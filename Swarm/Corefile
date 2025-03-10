@@ -4,8 +4,8 @@
     errors
 }
 
-cp-planta.saccilotto.com:53 {
-    file /etc/coredns/zones/cp-planta.saccilotto.com.db
+cpplanta.duckdns.org:53 {
+    file /etc/coredns/zones/cpplanta.duckdns.org.db
     log
     errors
 }
