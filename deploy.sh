@@ -16,6 +16,7 @@ function show_help {
     echo -e "  -p, --provider    Specify cloud provider (aws or azure), default: aws"
     echo -e "  -r, --regions     Specify region mode (single or multi), default: single"
     echo -e "  -s, --skip-terraform Skip the Terraform provisioning step (use existing infrastructure)"
+    echo -e "  -u, --update      Run in update mode (use update-deployment.sh if infrastructure exists)"
     echo -e "  -h, --help        Show this help message"
     echo ""
     echo -e "Example: ./deploy.sh --provider aws --regions multi"
@@ -25,6 +26,7 @@ function show_help {
 PROVIDER="aws"
 REGIONS="single"
 SKIP_TERRAFORM=false
+CHECK_UPDATE=true
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -41,6 +43,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_TERRAFORM=true
             shift
             ;;
+        -u|--update)
+            CHECK_UPDATE=true
+            shift
+            ;;
         -h|--help)
             show_help
             exit 0
@@ -52,6 +58,111 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Check if this is an update to existing infrastructure
+if [[ "$CHECK_UPDATE" == "true" ]]; then
+    if [[ "$REGIONS" == "single" ]]; then
+        INVENTORY_FILE="static_ip.ini"
+    else
+        INVENTORY_FILE="multi_region_inventory.ini"
+    fi
+    
+    if [[ -f "$INVENTORY_FILE" ]]; then
+        # Attempt to verify connectivity to existing infrastructure
+        echo -e "${YELLOW}Detected existing inventory file. Checking if infrastructure exists...${NC}"
+        
+        if [[ "$REGIONS" == "multi" ]]; then
+            MANAGER_GROUP="primary_region"
+        else
+            MANAGER_GROUP="instance1"
+        fi
+        
+        # Try to ping the first host in inventory with timeout
+        FIRST_HOST=$(grep -m1 ansible_ssh_user $INVENTORY_FILE | awk '{print $1}')
+        if [[ -n "$FIRST_HOST" ]]; then
+            ping -c 1 -W 3 $FIRST_HOST >/dev/null 2>&1
+            
+            if [ $? -eq 0 ]; then
+                echo -e "${GREEN}Existing infrastructure detected.${NC}"
+                echo -e "${YELLOW}Switching to update mode...${NC}"
+                
+                if [[ -f "update-deployment.sh" ]]; then
+                    echo -e "${YELLOW}Running update-deployment.sh...${NC}"
+                    chmod +x update-deployment.sh
+                    ./update-deployment.sh --provider $PROVIDER --regions $REGIONS
+                    exit $?
+                else
+                    echo -e "${RED}update-deployment.sh not found. Creating it...${NC}"
+                    # Create update script
+                    cat > update-deployment.sh << 'EOL'
+#!/bin/bash
+# Auto-generated update-deployment.sh
+# Please see update-deployment.sh documentation for full features
+
+# Colors for output
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Default values
+PROVIDER="aws"
+REGIONS="single"
+SERVICE="all"
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -p|--provider)
+            PROVIDER="$2"
+            shift 2
+            ;;
+        -r|--regions)
+            REGIONS="$2"
+            shift 2
+            ;;
+        -s|--service)
+            SERVICE="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+# Set project vars
+if [[ -f .env ]]; then
+    echo -e "${YELLOW}Loading environment variables from .env file...${NC}"
+    export $(grep -v '^#' .env | xargs)
+fi
+
+# Determine inventory file
+if [[ "$REGIONS" == "multi" ]]; then
+    INVENTORY_FILE="multi_region_inventory.ini"
+else
+    INVENTORY_FILE="static_ip.ini"
+fi
+
+echo -e "${YELLOW}Updating Docker Swarm services...${NC}"
+cd Swarm
+
+# Update existing stack
+ansible-playbook -i ../$INVENTORY_FILE ./swarm_setup.yml --ask-become-pass
+
+cd ..
+echo -e "${GREEN}Update completed successfully!${NC}"
+exit 0
+EOL
+                    chmod +x update-deployment.sh
+                    ./update-deployment.sh --provider $PROVIDER --regions $REGIONS
+                    exit $?
+                fi
+            fi
+        fi
+    fi
+fi
 
 # Set project vars
 if [[ -f .env ]]; then
@@ -148,8 +259,8 @@ else
         echo -e "${YELLOW}Checking Docker Swarm status on manager node...${NC}"
         
         # Extract manager IP and key from inventory
-        manager_ip=$(grep -A1 '\[CPPlanta1\]' ../static_ip.ini | tail -n1 | awk '{print $1}')
-        manager_key=$(grep -A1 '\[CPPlanta1\]' ../static_ip.ini | tail -n1 | grep -o 'ansible_ssh_private_key_file=[^ ]*' | cut -d= -f2)
+        manager_ip=$(grep -A1 '\[instance1\]' ../static_ip.ini | tail -n1 | awk '{print $1}')
+        manager_key=$(grep -A1 '\[instance1\]' ../static_ip.ini | tail -n1 | grep -o 'ansible_ssh_private_key_file=[^ ]*' | cut -d= -f2)
         
         # Check if Docker Swarm is running on manager
         ssh -i $manager_key ubuntu@$manager_ip "docker node ls" 2>/dev/null
@@ -163,6 +274,9 @@ else
         echo -e "${GREEN}Single-region deployment completed successfully!${NC}"
     fi
 fi
+
+# Save current git commit as deployment marker
+git rev-parse HEAD > ../.last_deployment 2>/dev/null || echo "unable to create deployment marker" > ../.last_deployment
 
 cd ..
 echo -e "${GREEN}Deployment process completed on $PROVIDER using $REGIONS region mode.${NC}"

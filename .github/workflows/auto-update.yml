@@ -1,0 +1,176 @@
+name: Automatic Deployment Update
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+      - 'LICENSE'
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+      provider:
+        description: 'Cloud provider to use'
+        required: true
+        default: 'aws'
+        type: choice
+        options:
+          - aws
+          - azure
+      regions:
+        description: 'Regions mode'
+        required: true
+        default: 'single'
+        type: choice
+        options:
+          - single
+          - multi
+      force_update:
+        description: 'Force update all services'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      infra_changed: ${{ steps.filter.outputs.infra }}
+      frontend_changed: ${{ steps.filter.outputs.frontend }}
+      backend_changed: ${{ steps.filter.outputs.backend }}
+      db_changed: ${{ steps.filter.outputs.db }}
+      swarm_changed: ${{ steps.filter.outputs.swarm }}
+      any_changed: ${{ steps.filter.outputs.any }}
+    
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Check for changes
+        id: filter
+        uses: dorny/paths-filter@v2
+        with:
+          filters: |
+            infra:
+              - 'Terraform**/**'
+              - 'SimpleTerraform**/**'
+            frontend:
+              - '**/frontend/**'
+              - '**/stack*.yml'
+              - '**/stack*.yaml'
+            backend:
+              - '**/backend/**'
+              - '**/stack*.yml'
+              - '**/stack*.yaml'
+            db:
+              - '**/postgres**/**'
+              - '**/pgadmin/**'
+              - '**/pgbouncer/**'
+              - '**/stack*.yml'
+              - '**/stack*.yaml'
+            swarm:
+              - 'Swarm/**'
+              - '**/stack*.yml'
+              - '**/stack*.yaml'
+              - '**/templates/**'
+            any:
+              - 'Terraform**/**'
+              - 'SimpleTerraform**/**'
+              - 'Swarm/**'
+              - '**/stack*.yml'
+              - '**/stack*.yaml'
+              - '**/templates/**'
+              
+  update-deployment:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.any_changed == 'true' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up SSH key
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      
+      - name: Install required tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y terraform ansible jq
+      
+      - name: Create .env file from secrets
+        run: |
+          echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" > .env
+          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
+          echo "AZURE_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> .env
+          echo "AZURE_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> .env
+          echo "AZURE_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}" >> .env
+          echo "AZURE_CLIENT_SECRET=${{ secrets.AZURE_CLIENT_SECRET }}" >> .env
+          echo "DOMAIN_NAME=${{ secrets.DOMAIN_NAME }}" >> .env
+          echo "ACME_EMAIL=${{ secrets.ACME_EMAIL }}" >> .env
+          echo "PGADMIN_EMAIL=${{ secrets.PGADMIN_EMAIL }}" >> .env
+          echo "PGADMIN_PASSWORD=${{ secrets.PGADMIN_PASSWORD }}" >> .env
+      
+      - name: Prepare update script
+        run: |
+          chmod +x ./update-deployment.sh
+      
+      - name: Run update script
+        run: |
+          # Determine parameters based on changes and inputs
+          PROVIDER="${{ github.event.inputs.provider || 'aws' }}"
+          REGIONS="${{ github.event.inputs.regions || 'single' }}"
+          
+          SERVICES=""
+          INFRA_FLAG=""
+          
+          # If manual trigger with force option, update everything
+          if [[ "${{ github.event.inputs.force_update }}" == "true" ]]; then
+            SERVICES="all"
+            INFRA_FLAG="--infra"
+          else
+            # Determine which services to update based on detected changes
+            SERVICES_ARRAY=()
+            
+            if [[ "${{ needs.detect-changes.outputs.frontend_changed }}" == "true" ]]; then
+              SERVICES_ARRAY+=("frontend")
+            fi
+            
+            if [[ "${{ needs.detect-changes.outputs.backend_changed }}" == "true" ]]; then
+              SERVICES_ARRAY+=("backend")
+            fi
+            
+            if [[ "${{ needs.detect-changes.outputs.db_changed }}" == "true" ]]; then
+              SERVICES_ARRAY+=("db")
+            fi
+            
+            if [[ "${{ needs.detect-changes.outputs.infra_changed }}" == "true" ]]; then
+              INFRA_FLAG="--infra"
+            fi
+            
+            # Join the services array with commas
+            if [[ ${#SERVICES_ARRAY[@]} -eq 0 ]]; then
+              SERVICES="all"  # Default to all if no specific changes detected
+            else
+              SERVICES=$(IFS=,; echo "${SERVICES_ARRAY[*]}")
+            fi
+          fi
+          
+          # Execute the update script with appropriate parameters
+          ./update-deployment.sh --provider $PROVIDER --regions $REGIONS --service $SERVICES $INFRA_FLAG --force

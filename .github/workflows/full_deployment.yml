@@ -1,0 +1,151 @@
+name: Full Infrastructure Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+          - dev
+      provider:
+        description: 'Cloud provider to use'
+        required: true
+        default: 'aws'
+        type: choice
+        options:
+          - aws
+          - azure
+      regions:
+        description: 'Regions mode'
+        required: true
+        default: 'single'
+        type: choice
+        options:
+          - single
+          - multi
+      skip_terraform:
+        description: 'Skip Terraform provisioning (use existing infrastructure)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  full-deployment:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up SSH key
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+      
+      - name: Install required tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y terraform ansible jq
+      
+      - name: Set up AWS credentials
+        if: github.event.inputs.provider == 'aws'
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ github.event.inputs.regions == 'multi' && 'us-east-2' || 'us-east-2' }}
+      
+      - name: Set up Azure credentials
+        if: github.event.inputs.provider == 'azure'
+        uses: azure/login@v1
+        with:
+          creds: |
+            {
+              "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
+              "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
+              "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+              "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
+            }
+      
+      - name: Create .env file from secrets
+        run: |
+          echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" > .env
+          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
+          echo "AZURE_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> .env
+          echo "AZURE_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> .env
+          echo "AZURE_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}" >> .env
+          echo "AZURE_CLIENT_SECRET=${{ secrets.AZURE_CLIENT_SECRET }}" >> .env
+          echo "DOMAIN_NAME=${{ secrets.DOMAIN_NAME }}" >> .env
+          echo "ACME_EMAIL=${{ secrets.ACME_EMAIL }}" >> .env
+          echo "PGADMIN_EMAIL=${{ secrets.PGADMIN_EMAIL }}" >> .env
+          echo "PGADMIN_PASSWORD=${{ secrets.PGADMIN_PASSWORD }}" >> .env
+      
+      - name: Create ssh_keys directory
+        run: mkdir -p ssh_keys
+      
+      - name: Make deployment script executable
+        run: chmod +x ./deploy.sh
+      
+      - name: Run deployment
+        run: |
+          PROVIDER="${{ github.event.inputs.provider }}"
+          REGIONS="${{ github.event.inputs.regions }}"
+          SKIP_TERRAFORM=""
+          
+          if [[ "${{ github.event.inputs.skip_terraform }}" == "true" ]]; then
+            SKIP_TERRAFORM="--skip-terraform"
+          fi
+          
+          ./deploy.sh --provider $PROVIDER --regions $REGIONS $SKIP_TERRAFORM
+      
+      - name: Export Terraform outputs
+        if: github.event.inputs.skip_terraform != 'true'
+        run: |
+          echo "# Infrastructure Outputs" > deployment-outputs.md
+          echo "Deployed on: $(date)" >> deployment-outputs.md
+          echo "Provider: ${{ github.event.inputs.provider }}" >> deployment-outputs.md
+          echo "Region mode: ${{ github.event.inputs.regions }}" >> deployment-outputs.md
+          echo "" >> deployment-outputs.md
+          
+          if [[ "${{ github.event.inputs.provider }}" == "aws" ]]; then
+            if [[ "${{ github.event.inputs.regions }}" == "single" ]]; then
+              echo "## AWS Instance IPs" >> deployment-outputs.md
+              cd SimpleTerraformAWS
+              terraform output -json | jq -r 'to_entries | .[] | "- **\(.key)**: \(.value.value)"' >> ../deployment-outputs.md
+            else
+              echo "## AWS Multi-Region Instance IPs" >> deployment-outputs.md
+              cd TerraformAWS
+              echo "### Primary Region" >> deployment-outputs.md
+              terraform output -json primary_region_instances | jq -r 'to_entries | .[] | "- **\(.key)**: \(.value)"' >> ../deployment-outputs.md
+              echo "" >> ../deployment-outputs.md
+              echo "### Secondary Region" >> deployment-outputs.md
+              terraform output -json secondary_region_instances | jq -r 'to_entries | .[] | "- **\(.key)**: \(.value)"' >> ../deployment-outputs.md
+            fi
+          elif [[ "${{ github.event.inputs.provider }}" == "azure" ]]; then
+            echo "## Azure VM IPs" >> deployment-outputs.md
+            cd TerraformAzure
+            terraform output -json | jq -r 'to_entries | .[] | "- **\(.key)**: \(.value.value)"' >> ../deployment-outputs.md
+          fi
+      
+      - name: Upload deployment outputs
+        uses: actions/upload-artifact@v3
+        with:
+          name: deployment-outputs
+          path: deployment-outputs.md
+      
+      - name: Create deployment summary
+        run: |
+          if [[ -f "deployment-outputs.md" ]]; then
+            echo "## Deployment Completed Successfully!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            cat deployment-outputs.md >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## Deployment Completed" >> $GITHUB_STEP_SUMMARY
+            echo "No infrastructure outputs available." >> $GITHUB_STEP_SUMMARY
+          fi
