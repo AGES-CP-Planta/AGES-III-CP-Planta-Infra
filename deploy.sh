@@ -226,8 +226,12 @@ if [[ "$SKIP_TERRAFORM" == "false" ]]; then
         fi
     fi
 
+    echo -e "${YELLOW}Waiting for instances to initialize (40 seconds)...${NC}"
+    sleep 40
+
     # Return to project root
     cd ..
+
 else
     echo -e "${YELLOW}Skipping Terraform provisioning as requested.${NC}"
 fi
