@@ -33,6 +33,11 @@ on:
         required: false
         default: false
         type: boolean
+      use_existing_ssh:
+        description: 'Use existing SSH key from secrets (otherwise generate new)'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   full-deployment:
@@ -43,7 +48,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: Set up SSH key
+      - name: Set up SSH key from secrets
+        if: github.event.inputs.use_existing_ssh == true
         uses: webfactory/ssh-agent@v0.8.0
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -139,12 +145,26 @@ jobs:
           name: deployment-outputs
           path: deployment-outputs.md
       
+      - name: Upload generated SSH keys
+        uses: actions/upload-artifact@v4
+        if: github.event.inputs.skip_terraform != 'true'
+        with:
+          name: ssh-keys
+          path: ssh_keys/*.pem
+      
       - name: Create deployment summary
         run: |
           if [[ -f "deployment-outputs.md" ]]; then
             echo "## Deployment Completed Successfully!" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             cat deployment-outputs.md >> $GITHUB_STEP_SUMMARY
+            
+            if [[ -d "ssh_keys" && $(ls ssh_keys/*.pem 2>/dev/null | wc -l) -gt 0 ]]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "## SSH Keys" >> $GITHUB_STEP_SUMMARY
+              echo "SSH keys have been generated and uploaded as artifacts." >> $GITHUB_STEP_SUMMARY
+              echo "Download them from the workflow run page." >> $GITHUB_STEP_SUMMARY
+            fi
           else
             echo "## Deployment Completed" >> $GITHUB_STEP_SUMMARY
             echo "No infrastructure outputs available." >> $GITHUB_STEP_SUMMARY
