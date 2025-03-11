@@ -51,6 +51,8 @@ on:
 
 jobs:
   full-deployment:
+    permissions:
+      contents: write  
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
     
@@ -143,7 +145,15 @@ jobs:
           fi
           
           ./deploy.sh --provider $PROVIDER --regions $REGIONS $SKIP_TERRAFORM --no-interactive
-      
+
+      - name: Save Terraform state
+        if: github.event.inputs.skip_terraform != 'true' && github.event.inputs.resource_handling != 'skip'
+        run: |
+          chmod +x ./save-terraform-state.sh
+          ./save-terraform-state.sh --provider ${{ github.event.inputs.provider }} --regions ${{ github.event.inputs.regions }} --action save --storage github
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Export Terraform outputs
         if: github.event.inputs.skip_terraform != 'true' && github.event.inputs.resource_handling != 'skip'
         run: |
