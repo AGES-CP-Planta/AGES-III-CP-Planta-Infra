@@ -28,6 +28,16 @@ on:
         options:
           - single
           - multi
+      resource_handling:
+        description: 'How to handle existing resources'
+        required: true
+        default: 'import'
+        type: choice
+        options:
+          - import
+          - delete
+          - skip
+          - continue
       skip_terraform:
         description: 'Skip Terraform provisioning (use existing infrastructure)'
         required: false
@@ -102,23 +112,40 @@ jobs:
       - name: Create ssh_keys directory
         run: mkdir -p ssh_keys
       
-      - name: Make deployment script executable
-        run: chmod +x ./deploy.sh
+      - name: Make scripts executable
+        run: |
+          chmod +x ./deploy.sh
+          chmod +x ./check-existing-resources.sh
+      
+      - name: Check for existing resources
+        if: github.event.inputs.skip_terraform != 'true'
+        run: |
+          ./check-existing-resources.sh --provider ${{ github.event.inputs.provider }} --regions ${{ github.event.inputs.regions }} --action check
+      
+      - name: Handle existing resources
+        if: github.event.inputs.skip_terraform != 'true' && github.event.inputs.resource_handling != 'continue'
+        run: |
+          RESOURCE_ACTION="${{ github.event.inputs.resource_handling }}"
+          
+          if [[ "$RESOURCE_ACTION" != "skip" ]]; then
+            echo "Handling existing resources with action: $RESOURCE_ACTION"
+            ./check-existing-resources.sh --provider ${{ github.event.inputs.provider }} --regions ${{ github.event.inputs.regions }} --action $RESOURCE_ACTION
+          fi
       
       - name: Run deployment
         run: |
           PROVIDER="${{ github.event.inputs.provider }}"
           REGIONS="${{ github.event.inputs.regions }}"
-          SKIP_TERRAFORM=""
           
-          if [[ "${{ github.event.inputs.skip_terraform }}" == "true" ]]; then
+          SKIP_TERRAFORM=""
+          if [[ "${{ github.event.inputs.skip_terraform }}" == "true" || "${{ github.event.inputs.resource_handling }}" == "skip" ]]; then
             SKIP_TERRAFORM="--skip-terraform"
           fi
           
-          ./deploy.sh --provider $PROVIDER --regions $REGIONS $SKIP_TERRAFORM
+          ./deploy.sh --provider $PROVIDER --regions $REGIONS $SKIP_TERRAFORM --no-interactive
       
       - name: Export Terraform outputs
-        if: github.event.inputs.skip_terraform != 'true'
+        if: github.event.inputs.skip_terraform != 'true' && github.event.inputs.resource_handling != 'skip'
         run: |
           echo "# Infrastructure Outputs" > deployment-outputs.md
           echo "Deployed on: $(date)" >> deployment-outputs.md
@@ -154,7 +181,7 @@ jobs:
       
       - name: Upload generated SSH keys
         uses: actions/upload-artifact@v4
-        if: github.event.inputs.skip_terraform != 'true'
+        if: github.event.inputs.skip_terraform != 'true' && github.event.inputs.resource_handling != 'skip'
         with:
           name: ssh-keys
           path: ssh_keys/*.pem

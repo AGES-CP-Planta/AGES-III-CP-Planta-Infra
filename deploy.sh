@@ -27,6 +27,7 @@ PROVIDER="aws"
 REGIONS="single"
 SKIP_TERRAFORM=false
 CHECK_UPDATE=true
+INTERACTIVE=true 
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -45,6 +46,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -u|--update)
             CHECK_UPDATE=true
+            shift
+            ;;
+        --no-interactive)
+            INTERACTIVE=false
             shift
             ;;
         -h|--help)
@@ -174,6 +179,55 @@ fi
 
 # Create directories if they don't exist
 mkdir -p ssh_keys Swarm
+
+# Check for existing resources
+if [[ "$SKIP_TERRAFORM" == "false" ]]; then
+    echo -e "${YELLOW}Checking for existing resources...${NC}"
+    
+    chmod +x ./check-existing-resources.sh
+    
+    # First check if resources exist
+    ./check-existing-resources.sh --provider $PROVIDER --regions $REGIONS --action check
+    
+    if [ $? -eq 0 ]; then
+        if [[ "$INTERACTIVE" == "true" ]]; then
+            # Interactive mode - prompt user for choice
+            echo -e "${YELLOW}Would you like to:${NC}"
+            echo -e "  1) ${BLUE}Import${NC} existing resources into Terraform state"
+            echo -e "  2) ${BLUE}Delete${NC} existing resources and create new ones"
+            echo -e "  3) ${BLUE}Skip${NC} Terraform provisioning entirely"
+            echo -e "  4) ${BLUE}Continue${NC} anyway (might fail if resources exist)"
+            echo -e "  5) ${RED}Abort${NC} deployment"
+            read -p "Enter your choice (1-5): " RESOURCE_ACTION
+            
+            case $RESOURCE_ACTION in
+                1)
+                    echo -e "${YELLOW}Importing existing resources...${NC}"
+                    ./check-existing-resources.sh --provider $PROVIDER --regions $REGIONS --action import
+                    ;;
+                2)
+                    echo -e "${YELLOW}Deleting existing resources...${NC}"
+                    ./check-existing-resources.sh --provider $PROVIDER --regions $REGIONS --action delete
+                    ;;
+                3)
+                    echo -e "${YELLOW}Skipping Terraform provisioning...${NC}"
+                    SKIP_TERRAFORM=true
+                    ;;
+                4)
+                    echo -e "${YELLOW}Continuing with Terraform apply...${NC}"
+                    ;;
+                5|*)
+                    echo -e "${RED}Deployment aborted.${NC}"
+                    exit 1
+                    ;;
+            esac
+        else
+            # Non-interactive mode - assume default action (import)
+            echo -e "${YELLOW}Running in non-interactive mode. Importing existing resources...${NC}"
+            ./check-existing-resources.sh --provider $PROVIDER --regions $REGIONS --action import
+        fi
+    fi
+fi
 
 # Provision infrastructure with Terraform if not skipped
 if [[ "$SKIP_TERRAFORM" == "false" ]]; then
