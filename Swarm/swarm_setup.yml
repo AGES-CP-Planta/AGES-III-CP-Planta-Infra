@@ -1,4 +1,4 @@
-- name: Configure the Docker Swarm Cluster
+- name: Configure the Docker Swarm Cluster with Optimized Workload Distribution
   hosts: all
   become: yes
   vars:
@@ -16,6 +16,7 @@
           - "Is manager: {{ inventory_hostname == manager_node }}"
           - "Manager IP: {{ hostvars[manager_node].ansible_host | default(manager_node) }}"
           
+    # Docker setup tasks remain the same
     - name: Remove old Docker versions
       apt:
         name:
@@ -93,6 +94,43 @@
         enabled: true
       become: yes
 
+    # Configure Docker daemon with proper resource settings
+    - name: Create Docker daemon.json directory
+      file:
+        path: /etc/docker
+        state: directory
+        mode: '0755'
+      become: yes
+
+    - name: Configure Docker daemon
+      copy:
+        content: |
+          {
+            "log-driver": "json-file",
+            "log-opts": {
+              "max-size": "10m",
+              "max-file": "3"
+            },
+            "default-address-pools": [
+              {
+                "base": "172.80.0.0/16",
+                "size": 24
+              }
+            ],
+            "metrics-addr": "0.0.0.0:9323",
+            "experimental": true
+          }
+        dest: /etc/docker/daemon.json
+      become: yes
+      register: docker_config
+
+    - name: Restart Docker service if config changed
+      systemd:
+        name: docker
+        state: restarted
+      when: docker_config.changed
+      become: yes
+
     # Handle swarm initialization for the manager node
     - name: Initialize Swarm on manager node
       docker_swarm:
@@ -141,6 +179,42 @@
         - hostvars[manager_node]['swarm_info']['swarm_facts'] is defined
       ignore_errors: yes
 
+    # Add node labels for better workload distribution
+    - name: Set role label on manager node
+      command: docker node update --label-add role=manager {{ hostvars[manager_node]['ansible_hostname'] }}
+      delegate_to: "{{ manager_node }}"
+      run_once: true
+      ignore_errors: yes
+
+    - name: Label worker nodes
+      command: docker node update --label-add role=worker {{ hostvars[item]['ansible_hostname'] }}
+      loop: "{{ groups['instance2'] }}"
+      delegate_to: "{{ manager_node }}"
+      run_once: true
+      ignore_errors: yes
+
+    # Set worker node resource availability to ensure proper scheduling
+    - name: Set worker availability to active
+      command: docker node update --availability active {{ hostvars[item]['ansible_hostname'] }}
+      loop: "{{ groups['instance2'] }}"
+      delegate_to: "{{ manager_node }}"
+      run_once: true
+      ignore_errors: yes
+
+    # Set resource labels on nodes for workload distribution
+    - name: Set frontend workload label on first worker
+      command: docker node update --label-add workload=frontend {{ hostvars[first_worker]['ansible_hostname'] }}
+      delegate_to: "{{ manager_node }}"
+      run_once: true
+      ignore_errors: yes
+
+    - name: Set database workload label on manager
+      command: docker node update --label-add workload=database {{ hostvars[manager_node]['ansible_hostname'] }}
+      delegate_to: "{{ manager_node }}"
+      run_once: true
+      ignore_errors: yes
+
+    # Copy DNS and stack configuration files 
     - name: Copy stack.yml to manager
       copy:
         src: ./stack.yml
@@ -166,19 +240,44 @@
 
     - name: Copy zone file to manager
       copy:
-        src: ./cp-planta.saccilotto.com.db
-        dest: /home/{{ ansible_ssh_user }}/dns/zones/cp-planta.saccilotto.com.db
+        src: ./cpplanta.duckdns.org.db
+        dest: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
       delegate_to: "{{ manager_node }}"
       run_once: true
 
     - name: Update zone file with manager IP
       replace:
-        path: /home/{{ ansible_ssh_user }}/dns/zones/cp-planta.saccilotto.com.db
+        path: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
         regexp: '10\.0\.1\.10'
         replace: "{{ hostvars[manager_node]['manager_ip'] }}"
       delegate_to: "{{ manager_node }}"
       run_once: true
 
+    # Configure system limits for better container performance
+    - name: Set container limits in sysctl
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      with_items:
+        - { name: 'fs.file-max', value: '1000000' }
+        - { name: 'vm.max_map_count', value: '262144' }
+        - { name: 'net.core.somaxconn', value: '65535' }
+      become: yes
+
+    # Add ulimit settings for node user
+    - name: Set limits for node users
+      blockinfile:
+        path: /etc/security/limits.conf
+        block: |
+          {{ ansible_ssh_user }} soft nofile 1000000
+          {{ ansible_ssh_user }} hard nofile 1000000
+          {{ ansible_ssh_user }} soft nproc 65535
+          {{ ansible_ssh_user }} hard nproc 65535
+      become: yes
+
+    # Deploy the stack with better resource allocation
     - name: Deploy the stack on manager (with force update)
       shell: docker stack deploy --with-registry-auth --resolve-image always -c /home/{{ ansible_ssh_user }}/stack.yml CP-Planta
       args:
@@ -186,7 +285,13 @@
       delegate_to: "{{ manager_node }}"
       run_once: true
 
-    - name: Update services (force update)
+    # Wait for stack to be deployed before updating services
+    - name: Wait for initial deployment
+      pause:
+        seconds: 15
+
+    # Update services with resource constraints (will restart services with proper constraints)
+    - name: Update services with resource constraints
       shell: |
         docker service update --force {{ item }}
       loop:
@@ -201,6 +306,27 @@
       run_once: true
       async: 75  
       poll: 0   
+      ignore_errors: yes
+
+    # Install monitoring tools
+    - name: Install monitoring tools (htop, ctop, etc)
+      apt:
+        name:
+          - htop
+          - iotop
+          - sysstat
+        state: present
+      become: yes
+
+    - name: Install ctop (container monitoring tool)
+      shell: |
+        wget -qO- https://azlux.fr/repo.gpg.key | sudo apt-key add -
+        echo "deb http://packages.azlux.fr/debian/ bullseye main" | sudo tee /etc/apt/sources.list.d/azlux.list
+        sudo apt update
+        sudo apt install -y ctop
+      args:
+        creates: /usr/bin/ctop
+      become: yes
       ignore_errors: yes
 
     - name: Wait for services to stabilize
@@ -229,3 +355,13 @@
     - name: Display service status
       debug:
         var: service_status.stdout_lines
+
+    - name: Show node resource utilization
+      command: docker node ls
+      delegate_to: "{{ manager_node }}"
+      run_once: true
+      register: node_status
+    
+    - name: Display node status
+      debug:
+        var: node_status.stdout_lines

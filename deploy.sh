@@ -154,7 +154,7 @@ echo -e "${YELLOW}Updating Docker Swarm services...${NC}"
 cd Swarm
 
 # Update existing stack
-ansible-playbook -i ../$INVENTORY_FILE ./swarm_setup.yml --ask-become-pass
+ansible-playbook -i ../$INVENTORY_FILE ./swarm_setup.yml 
 
 cd ..
 echo -e "${GREEN}Update completed successfully!${NC}"
@@ -300,7 +300,7 @@ cd Swarm
 
 if [[ "$REGIONS" == "multi" ]]; then
     echo -e "${YELLOW}Using multi-region configuration...${NC}"
-    ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i ../multi_region_inventory.ini ./swarm_multi_region_setup.yml --ask-become-pass
+    ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i ../multi_region_inventory.ini ./swarm_multi_region_setup.yml 
     
     if [ $? -ne 0 ]; then
         echo -e "${RED}Error: Multi-region setup playbook encountered errors.${NC}"
@@ -310,7 +310,7 @@ if [[ "$REGIONS" == "multi" ]]; then
     fi
 else
     echo -e "${YELLOW}Using single-region configuration...${NC}"
-    ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i ../static_ip.ini ./swarm_setup.yml --ask-become-pass
+    ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i ../static_ip.ini ./swarm_setup.yml 
     
     if [ $? -ne 0 ]; then
         echo -e "${RED}Error: Swarm setup playbook encountered errors.${NC}"

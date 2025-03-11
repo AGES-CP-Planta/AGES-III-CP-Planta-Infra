@@ -226,10 +226,10 @@ fi
 echo -e "${YELLOW}Updating DNS configuration...${NC}"
 ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m file -a "path=/home/{{ ansible_ssh_user }}/dns/zones state=directory mode=0755" --become
 ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m copy -a "src=./Corefile dest=/home/{{ ansible_ssh_user }}/dns/Corefile" --become
-ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m copy -a "src=./cp-planta.saccilotto.com.db dest=/home/{{ ansible_ssh_user }}/dns/zones/cp-planta.saccilotto.com.db" --become
+ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m copy -a "src=./cpplanta.duckdns.org.db dest=/home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db" --become
 
 # Update DNS zone file with manager IP
-ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m replace -a "path=/home/{{ ansible_ssh_user }}/dns/zones/cp-planta.saccilotto.com.db regexp='10\\.0\\.1\\.10' replace='{{ ansible_default_ipv4.address }}'" --become
+ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m replace -a "path=/home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db regexp='10\\.0\\.1\\.10' replace='{{ ansible_default_ipv4.address }}'" --become
 
 # Redeploy the stacks
 if [[ "$REGIONS" == "multi" ]]; then

@@ -32,5 +32,5 @@ variable "vm_names" {
 }
 
 variable "username" {
-  default = "adminuser"
+  default = "ubuntu"
 }

@@ -4,6 +4,7 @@
 .terraform/
 .terraform.lock.hcl
 *.plan
+.last_deployment
 
 # Ansible files
 *.retry

@@ -86,7 +86,7 @@ elif [[ "$PROVIDER" == "azure" ]]; then
 fi
 
 # GitHub-based storage variables
-GITHUB_REPO="Saccilotto/AGES-III-CP-Planta-Infra"
+GITHUB_REPO="Saccilotto-AGES-Projects/AGES-III-CP-Planta-Infra"
 GITHUB_BRANCH="terraform-state"
 GITHUB_TOKEN="${GITHUB_TOKEN:-$GH_TOKEN}"
 
@@ -245,9 +245,9 @@ function save_terraform_state {
         mkdir -p "${TERRAFORM_DIR}"
         
         # Copy the state file
-        cp "../../${TERRAFORM_DIR}/terraform.tfstate" "${TERRAFORM_DIR}/"
-        if [[ -f "../../${TERRAFORM_DIR}/terraform.tfstate.backup" ]]; then
-            cp "../../${TERRAFORM_DIR}/terraform.tfstate.backup" "${TERRAFORM_DIR}/"
+        cp "./${TERRAFORM_DIR}/terraform.tfstate" "${TERRAFORM_DIR}/"
+        if [[ -f "./${TERRAFORM_DIR}/terraform.tfstate.backup" ]]; then
+            cp "./${TERRAFORM_DIR}/terraform.tfstate.backup" "${TERRAFORM_DIR}/"
         fi
         
         # Push the changes
@@ -338,12 +338,12 @@ function load_terraform_state {
         # Check if the state file exists
         if [[ -f "${TERRAFORM_DIR}/terraform.tfstate" ]]; then
             # Create the directory structure if it doesn't exist
-            mkdir -p "../../${TERRAFORM_DIR}"
+            mkdir -p "./${TERRAFORM_DIR}"
             
             # Copy the state file
-            cp "${TERRAFORM_DIR}/terraform.tfstate" "../../${TERRAFORM_DIR}/"
+            cp "${TERRAFORM_DIR}/terraform.tfstate" "./${TERRAFORM_DIR}/"
             if [[ -f "${TERRAFORM_DIR}/terraform.tfstate.backup" ]]; then
-                cp "${TERRAFORM_DIR}/terraform.tfstate.backup" "../../${TERRAFORM_DIR}/"
+                cp "${TERRAFORM_DIR}/terraform.tfstate.backup" "./${TERRAFORM_DIR}/"
             fi
             
             cd - > /dev/null

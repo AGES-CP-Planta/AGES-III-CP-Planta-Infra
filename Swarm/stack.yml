@@ -20,9 +20,17 @@ services:
     networks:
       - traefik_network
     deploy:
+      # Traefik needs to run on manager for Docker socket access
       placement:
         constraints:
           - node.role == manager
+      resources:
+        limits:
+          cpus: '0.30'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
       labels:
         - "traefik.enable=true"
 
@@ -42,6 +50,17 @@ services:
       - backend_network
     deploy:
       replicas: 1
+      # Primary DB should be on manager for reliability
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
       restart_policy:
         condition: any
       labels:
@@ -68,6 +87,17 @@ services:
       - postgres_primary
     deploy:
       replicas: 1
+      # Place replica on worker to distribute DB load and for failover readiness
+      placement:
+        constraints:
+          - node.role == worker
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
       restart_policy:
         condition: any
       labels:
@@ -83,7 +113,16 @@ services:
     networks:
       - backend_network
     deploy:
-      replicas: 1
+      replicas: 2
+      # Use global to place one instance on each node
+      mode: global
+      resources:
+        limits:
+          cpus: '0.20'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
       restart_policy:
         condition: any
       labels:
@@ -105,9 +144,24 @@ services:
       - backend_network
       - traefik_network
     deploy:
-      replicas: 1
+      replicas: 2
+      # Distribute backend across both manager and worker
+      placement:
+        preferences:
+          - spread: node.role
+      resources:
+        limits:
+          cpus: '0.40'
+          memory: 384M
+        reservations:
+          cpus: '0.20'
+          memory: 192M
       restart_policy:
         condition: any
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.backend.rule=Host(`api.cpplanta.duckdns.org`)"
@@ -120,7 +174,7 @@ services:
   pgadmin:
     image: norohim/pgadmin:latest
     environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@saccilotto.com
+      - PGADMIN_DEFAULT_EMAIL=sacilotto.andre@gmail.com
       - PGADMIN_DEFAULT_PASSWORD=SecurePassword123
     depends_on:
       - postgres_primary
@@ -129,6 +183,17 @@ services:
       - traefik_network
     deploy:
       replicas: 1
+      # Preferably on worker to distribute admin tools
+      placement:
+        preferences:
+          - spread: node.role
+      resources:
+        limits:
+          cpus: '0.30'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 96M
       restart_policy:
         condition: any
       labels:
@@ -150,9 +215,24 @@ services:
       - frontend_network
       - traefik_network
     deploy:
-      replicas: 1
+      replicas: 2
+      # Distribute frontend across both nodes
+      placement:
+        preferences:
+          - spread: node.role
+      resources:
+        limits:
+          cpus: '0.30'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
       restart_policy:
         condition: any
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.frontend.rule=Host(`cpplanta.duckdns.org`)"
@@ -171,7 +251,15 @@ services:
       - frontend_network
       - traefik_network
     deploy:
-      replicas: 1
+      mode: global
+      # Run DNS on every node for performance
+      resources:
+        limits:
+          cpus: '0.20'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
       restart_policy:
         condition: any
       labels:
@@ -179,6 +267,26 @@ services:
     ports:
       - "53:53/udp"
       - "53:53/tcp"
+
+  # Add visualization service to monitor node utilization
+  visualizer:
+    image: dockersamples/visualizer:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - traefik_network
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.visualizer.rule=Host(`viz.cpplanta.duckdns.org`)"
+        - "traefik.http.routers.visualizer.entrypoints=websecure"
+        - "traefik.http.routers.visualizer.tls.certresolver=myresolver"
+        - "traefik.http.services.visualizer.loadbalancer.server.port=8080"
+    ports:
+      - "8080:8080"
 
 networks:
   backend_network:
