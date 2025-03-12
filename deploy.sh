@@ -17,6 +17,7 @@ function show_help {
     echo -e "  -r, --regions     Specify region mode (single or multi), default: single"
     echo -e "  -s, --skip-terraform Skip the Terraform provisioning step (use existing infrastructure)"
     echo -e "  -u, --update      Run in update mode (use update-deployment.sh if infrastructure exists)"
+    echo -e "  --no-interactive   Run in non-interactive mode"
     echo -e "  -h, --help        Show this help message"
     echo ""
     echo -e "Example: ./deploy.sh --provider aws --regions multi"

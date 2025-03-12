@@ -149,7 +149,7 @@ resource "aws_security_group" "sg" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
-
+  
   # Outbound rules
   egress {
     description = "Allow all outbound traffic"

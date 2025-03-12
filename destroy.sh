@@ -16,6 +16,7 @@ function show_help {
     echo -e "  -p, --provider    Specify cloud provider (aws or azure), default: aws"
     echo -e "  -r, --regions     Specify region mode (single or multi), default: single"
     echo -e "  -s, --state       Path to an existing tfstate file to use (optional)"
+    echo -e "  -y, --yes         Auto-approve destruction (no confirmation prompt)"
     echo -e "  -h, --help        Show this help message"
     echo ""
     echo -e "Example: ./terraform-destroy.sh --provider aws --regions multi --state ./my-terraform.tfstate"
