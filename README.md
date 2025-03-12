@@ -1,7 +1,7 @@
 # CP-Planta Infrastructure
 
-[![Automatic Deployment Update](https://github.com/Saccilotto/AGES-III-CP-Planta-Infra/actions/workflows/auto-update.yml/badge.svg)](https://github.com/Saccilotto/AGES-III-CP-Planta-Infra/actions/workflows/auto-update.yml)
-[![Full Infrastructure Deployment](https://github.com/Saccilotto/AGES-III-CP-Planta-Infra/actions/workflows/full_deployment.yml/badge.svg)](https://github.com/Saccilotto/AGES-III-CP-Planta-Infra/actions/workflows/full_deployment.yml)
+[![Simple Deployment Update](https://github.com/Saccilotto-AGES-Projects/AGES-III-CP-Planta-Infra/actions/workflows/auto-update.yml/badge.svg)](https://github.com/Saccilotto-AGES-Projects/AGES-III-CP-Planta-Infra/blob/main/.github/workflows/auto-update.yml)
+[![Full Infrastructure Deployment](https://github.com/Saccilotto-AGES-Projects/AGES-III-CP-Planta-Infra/actions/workflows/full_deployment.yml/badge.svg)](https://github.com/Saccilotto-AGES-Projects/AGES-III-CP-Planta-Infra/blob/main/.github/workflows/full_deployment.yml)
 
 Cloud-agnostic Infrastructure as Code (IaC) and Configuration as Code (CaC) for the CP-Planta application, supporting AWS and Azure platforms with Docker Swarm orchestration.
 
@@ -16,7 +16,15 @@ CP-Planta Infrastructure provides an automated deployment pipeline for a contain
 - **Automated DevOps**: GitHub Actions workflows for CI/CD
 - **Secure access**: Automatic SSL certificate generation via Let's Encrypt
 
-![Infrastructure Diagram](./docs/infrastructure-diagram.png)
+## Architecture Diagrams
+
+### Simple Infrastructure Diagram (AWS or Azure)
+
+![Simple Infrastructure Diagram](./docs/images/single-region-diagram.svg)
+
+### Multi-Region Infrastructure Diagram (AWS)
+
+![Multi Region Infrastructure Diagram](./docs/images/multi-region-diagram.svg)
 
 ## Quick Start
 
@@ -64,10 +72,12 @@ CP-Planta-Infra/
 ├── ssh_keys/              # Generated SSH keys (gitignored)
 ├── Swarm/                 # Docker Swarm configuration
 ├── TerraformAWSSingle/    # Single-region AWS config
-├── TerraformAWSMulti/     # Multi-region AWS config
-├── TerraformAzure/        # Azure config
+├── TerraformAWS/          # Multi-region AWS config
+├── TerraformAzure/        # Azure config for single region
 ├── *.sh                   # Deployment and utility scripts
-└── docs/                  # Documentation
+├── *.md                   # Documentation
+├── .env                   # Environment variables (gitignored)
+└── *.example              # Variable files' templates
 ```
 
 ## Core Components

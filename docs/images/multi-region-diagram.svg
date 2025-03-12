@@ -1,0 +1,152 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" width="1000" height="700">
+  <!-- Background -->
+  <rect width="1000" height="700" fill="#f8f9fa" />
+  
+  <!-- AWS Cloud -->
+  <rect x="50" y="40" width="900" height="620" rx="10" fill="#e6f7ff" stroke="#ff9900" stroke-width="2" />
+  <text x="70" y="70" font-family="Arial" font-size="20" font-weight="bold" fill="#ff9900">AWS Cloud</text>
+  
+  <!-- Primary Region -->
+  <rect x="75" y="90" width="425" height="550" rx="10" fill="#ecf3f9" stroke="#ff9900" stroke-width="2" />
+  <text x="200" y="120" font-family="Arial" font-size="18" font-weight="bold" fill="#ff9900">Primary Region (us-east-2)</text>
+  
+  <!-- Secondary Region -->
+  <rect x="525" y="90" width="425" height="550" rx="10" fill="#ecf3f9" stroke="#ff9900" stroke-width="2" />
+  <text x="650" y="120" font-family="Arial" font-size="18" font-weight="bold" fill="#ff9900">Secondary Region (us-west-2)</text>
+  
+  <!-- Primary VPC -->
+  <rect x="100" y="140" width="375" height="480" rx="10" fill="#f0f8ff" stroke="#0078d7" stroke-width="2" stroke-dasharray="5,5" />
+  <text x="120" y="170" font-family="Arial" font-size="16" fill="#0078d7">Primary VPC (10.0.0.0/16)</text>
+  
+  <!-- Secondary VPC -->
+  <rect x="550" y="140" width="375" height="480" rx="10" fill="#f0f8ff" stroke="#0078d7" stroke-width="2" stroke-dasharray="5,5" />
+  <text x="570" y="170" font-family="Arial" font-size="16" fill="#0078d7">Secondary VPC (10.1.0.0/16)</text>
+  
+  <!-- VPC Peering -->
+  <path d="M475 330 L550 330" stroke="#0078d7" stroke-width="3" stroke-dasharray="10,5" />
+  <rect x="455" y="300" width="115" height="60" rx="10" fill="#ffffff" stroke="#0078d7" stroke-width="2" />
+  <text x="470" y="335" font-family="Arial" font-size="14" fill="#0078d7">VPC Peering</text>
+  
+  <!-- Internet -->
+  <rect x="425" y="20" width="150" height="50" rx="10" fill="#ffffff" stroke="#333" stroke-width="2" />
+  <text x="465" y="50" font-family="Arial" font-size="16" fill="#333">Internet</text>
+  
+  <!-- Internet Connections -->
+  <path d="M450 70 L300 140" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)" />
+  <path d="M550 70 L700 140" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)" />
+  
+  <!-- Primary Subnet -->
+  <rect x="125" y="190" width="325" height="410" rx="10" fill="#f0f8ff" stroke="#0078d7" stroke-width="2" />
+  <text x="145" y="220" font-family="Arial" font-size="16" fill="#0078d7">Primary Subnet (10.0.1.0/24)</text>
+  
+  <!-- Secondary Subnet -->
+  <rect x="575" y="190" width="325" height="410" rx="10" fill="#f0f8ff" stroke="#0078d7" stroke-width="2" />
+  <text x="595" y="220" font-family="Arial" font-size="16" fill="#0078d7">Secondary Subnet (10.1.1.0/24)</text>
+  
+  <!-- Primary Security Group -->
+  <rect x="140" y="240" width="295" height="345" rx="10" fill="none" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,5" />
+  <text x="160" y="270" font-family="Arial" font-size="14" fill="#ff6b6b">Primary Security Group</text>
+  
+  <!-- Secondary Security Group -->
+  <rect x="590" y="240" width="295" height="345" rx="10" fill="none" stroke="#ff6b6b" stroke-width="2" stroke-dasharray="5,5" />
+  <text x="610" y="270" font-family="Arial" font-size="14" fill="#ff6b6b">Secondary Security Group</text>
+  
+  <!-- Primary Instances -->
+  <rect x="160" y="290" width="120" height="140" rx="5" fill="#ffffff" stroke="#333" stroke-width="2" />
+  <text x="175" y="315" font-family="Arial" font-size="14" font-weight="bold" fill="#333">Primary Manager</text>
+  <rect x="170" y="325" width="100" height="25" rx="5" fill="#d9edf7" stroke="#31708f" stroke-width="1" />
+  <text x="175" y="342" font-family="Arial" font-size="12" fill="#31708f">Traefik</text>
+  <rect x="170" y="355" width="100" height="25" rx="5" fill="#d9edf7" stroke="#31708f" stroke-width="1" />
+  <text x="175" y="372" font-family="Arial" font-size="12" fill="#31708f">PostgreSQL Primary</text>
+  <rect x="170" y="385" width="100" height="25" rx="5" fill="#d9edf7" stroke="#31708f" stroke-width="1" />
+  <text x="175" y="402" font-family="Arial" font-size="12" fill="#31708f">Backend (Primary)</text>
+  
+  <rect x="295" y="290" width="120" height="140" rx="5" fill="#ffffff" stroke="#333" stroke-width="2" />
+  <text x="315" y="315" font-family="Arial" font-size="14" font-weight="bold" fill="#333">Primary Worker</text>
+  <rect x="305" y="325" width="100" height="25" rx="5" fill="#fcf8e3" stroke="#8a6d3b" stroke-width="1" />
+  <text x="310" y="342" font-family="Arial" font-size="12" fill="#8a6d3b">Frontend</text>
+  <rect x="305" y="355" width="100" height="25" rx="5" fill="#fcf8e3" stroke="#8a6d3b" stroke-width="1" />
+  <text x="310" y="372" font-family="Arial" font-size="12" fill="#8a6d3b">Postgres Replica</text>
+  <rect x="305" y="385" width="100" height="25" rx="5" fill="#fcf8e3" stroke="#8a6d3b" stroke-width="1" />
+  <text x="310" y="402" font-family="Arial" font-size="12" fill="#8a6d3b">PgAdmin</text>
+  
+  <!-- Secondary Instances -->
+  <rect x="610" y="290" width="120" height="140" rx="5" fill="#ffffff" stroke="#333" stroke-width="2" />
+  <text x="625" y="315" font-family="Arial" font-size="14" font-weight="bold" fill="#333">DR Manager</text>
+  <rect x="620" y="325" width="100" height="25" rx="5" fill="#d9edf7" stroke="#31708f" stroke-width="1" />
+  <text x="625" y="342" font-family="Arial" font-size="12" fill="#31708f">Traefik</text>
+  <rect x="620" y="355" width="100" height="25" rx="5" fill="#d9edf7" stroke="#31708f" stroke-width="1" />
+  <text x="625" y="372" font-family="Arial" font-size="12" fill="#31708f">PostgreSQL Replica</text>
+  <rect x="620" y="385" width="100" height="25" rx="5" fill="#d9edf7" stroke="#31708f" stroke-width="1" />
+  <text x="625" y="402" font-family="Arial" font-size="12" fill="#31708f">Backend (DR)</text>
+  
+  <rect x="745" y="290" width="120" height="140" rx="5" fill="#ffffff" stroke="#333" stroke-width="2" />
+  <text x="767" y="315" font-family="Arial" font-size="14" font-weight="bold" fill="#333">DR Worker</text>
+  <rect x="755" y="325" width="100" height="25" rx="5" fill="#fcf8e3" stroke="#8a6d3b" stroke-width="1" />
+  <text x="760" y="342" font-family="Arial" font-size="12" fill="#8a6d3b">Frontend</text>
+  <rect x="755" y="355" width="100" height="25" rx="5" fill="#fcf8e3" stroke="#8a6d3b" stroke-width="1" />
+  <text x="760" y="372" font-family="Arial" font-size="12" fill="#8a6d3b">PgBouncer</text>
+  <rect x="755" y="385" width="100" height="25" rx="5" fill="#fcf8e3" stroke="#8a6d3b" stroke-width="1" />
+  <text x="760" y="402" font-family="Arial" font-size="12" fill="#8a6d3b">PgAdmin</text>
+  
+  <!-- Database Replication -->
+  <path d="M270 365 L620 365" stroke="#5cb85c" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#arrowheadGreen)" />
+  <text x="400" y="355" font-family="Arial" font-size="14" fill="#5cb85c">Database Replication</text>
+  
+  <!-- Health Checks -->
+  <path d="M220 450 L670 450" stroke="#5bc0de" stroke-width="2" stroke-dasharray="8,4" />
+  <text x="390" y="445" font-family="Arial" font-size="14" fill="#5bc0de">Health Checks</text>
+  
+  <!-- Elastic IPs -->
+  <rect x="160" y="480" width="120" height="30" rx="5" fill="#ffffff" stroke="#5bc0de" stroke-width="2" />
+  <text x="170" y="500" font-family="Arial" font-size="12" fill="#5bc0de">Elastic IP (Manager)</text>
+  
+  <rect x="295" y="480" width="120" height="30" rx="5" fill="#ffffff" stroke="#5bc0de" stroke-width="2" />
+  <text x="305" y="500" font-family="Arial" font-size="12" fill="#5bc0de">Elastic IP (Worker)</text>
+  
+  <rect x="610" y="480" width="120" height="30" rx="5" fill="#ffffff" stroke="#5bc0de" stroke-width="2" />
+  <text x="620" y="500" font-family="Arial" font-size="12" fill="#5bc0de">Elastic IP (DR-Mgr)</text>
+  
+  <rect x="745" y="480" width="120" height="30" rx="5" fill="#ffffff" stroke="#5bc0de" stroke-width="2" />
+  <text x="755" y="500" font-family="Arial" font-size="12" fill="#5bc0de">Elastic IP (DR-Wkr)</text>
+  
+  <!-- Docker Swarm Overlay Networks -->
+  <rect x="155" y="530" width="265" height="30" rx="5" fill="#dff0d8" stroke="#5cb85c" stroke-width="2" />
+  <text x="190" y="550" font-family="Arial" font-size="14" fill="#333">Primary Swarm Network</text>
+  
+  <rect x="605" y="530" width="265" height="30" rx="5" fill="#dff0d8" stroke="#5cb85c" stroke-width="2" />
+  <text x="640" y="550" font-family="Arial" font-size="14" fill="#333">Secondary Swarm Network</text>
+  
+  <!-- DNS and Failover -->
+  <rect x="390" y="600" width="250" height="40" rx="5" fill="#ffffff" stroke="#5cb85c" stroke-width="2" />
+  <text x="440" y="625" font-family="Arial" font-size="16" fill="#5cb85c">DNS with Failover Capability</text>
+  
+  <path d="M515 600 L220 530" stroke="#5cb85c" stroke-width="2" marker-end="url(#arrowheadGreen)" />
+  <path d="M515 600 L670 530" stroke="#5cb85c" stroke-width="2" marker-end="url(#arrowheadGreen)" />
+  
+  <!-- External Clients -->
+  <rect x="425" y="660" width="150" height="30" rx="5" fill="#ffffff" stroke="#333" stroke-width="2" />
+  <text x="465" y="680" font-family="Arial" font-size="14" fill="#333">External Clients</text>
+  
+  <path d="M500 660 L500 640" stroke="#333" stroke-width="2" marker-end="url(#arrowhead)" />
+  
+  <!-- Arrowhead marker definitions -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
+    </marker>
+    <marker id="arrowheadGreen" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#5cb85c" />
+    </marker>
+  </defs>
+  
+  <!-- Legend -->
+  <rect x="750" y="20" width="180" height="80" rx="5" fill="#ffffff" stroke="#333" stroke-width="1" />
+  <text x="760" y="40" font-family="Arial" font-size="14" font-weight="bold" fill="#333">Legend:</text>
+  <rect x="760" y="50" width="12" height="12" fill="#d9edf7" stroke="#31708f" stroke-width="1" />
+  <text x="780" y="60" font-family="Arial" font-size="12" fill="#333">Manager Services</text>
+  <rect x="760" y="70" width="12" height="12" fill="#fcf8e3" stroke="#8a6d3b" stroke-width="1" />
+  <text x="780" y="80" font-family="Arial" font-size="12" fill="#333">Worker Services</text>
+  <rect x="760" y="90" width="12" height="12" fill="#dff0d8" stroke="#5cb85c" stroke-width="1" />
+  <text x="780" y="100" font-family="Arial" font-size="12" fill="#333">Overlay Networks</text>
+</svg>
