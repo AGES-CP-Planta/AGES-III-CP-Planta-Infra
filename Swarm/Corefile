@@ -6,6 +6,9 @@
 
 cpplanta.duckdns.org:53 {
     file /etc/coredns/zones/cpplanta.duckdns.org.db
+    forward . 8.8.8.8 8.8.4.4 {
+        except cpplanta.duckdns.org
+    }
     log
     errors
 }

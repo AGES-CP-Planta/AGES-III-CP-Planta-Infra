@@ -20,7 +20,7 @@ services:
     networks:
       - traefik_network
     deploy:
-      # Traefik needs to run on manager for Docker socket access
+      # Traefik needs o run on manager for Docker socket access
       placement:
         constraints:
           - node.role == manager
@@ -252,7 +252,6 @@ services:
       - traefik_network
     deploy:
       mode: global
-      # Run DNS on every node for performance
       resources:
         limits:
           cpus: '0.20'
@@ -268,7 +267,33 @@ services:
       - "53:53/udp"
       - "53:53/tcp"
 
-  # Add visualization service to monitor node utilization
+  duckdns:
+    image: linuxserver/duckdns:latest
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Sao_Paulo  
+      - SUBDOMAINS=cpplanta
+      - TOKEN=ab25d043-0943-4338-88c7-315b3973ca90  
+      - LOG_FILE=false
+    networks:
+      - traefik_network
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: '0.10'
+          memory: 64M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
+      restart_policy:  
+        condition: any
+      labels:
+        - "traefik.enable=false"
+
   visualizer:
     image: dockersamples/visualizer:latest
     volumes:
@@ -280,9 +305,9 @@ services:
         constraints:
           - node.role == manager
       labels:
-        - "traefik.enable=true"
+        - "traefik.enable=true".e
         - "traefik.http.routers.visualizer.rule=Host(`viz.cpplanta.duckdns.org`)"
-        - "traefik.http.routers.visualizer.entrypoints=websecure"
+        - "traefik.http.routers.visualizerntrypoints=websecure"
         - "traefik.http.routers.visualizer.tls.certresolver=myresolver"
         - "traefik.http.services.visualizer.loadbalancer.server.port=8080"
     ports:

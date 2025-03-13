@@ -1,22 +1,24 @@
 $ORIGIN cpplanta.duckdns.org.
 $TTL 3600
 @       IN      SOA     ns1.cpplanta.duckdns.org. admin.cpplanta.duckdns.org. (
-                        2023031500      ; serial
+                        2023031501      ; serial (increment this)
                         3600            ; refresh
                         1800            ; retry
                         604800          ; expire
                         86400           ; minimum
 )
                 IN      NS      ns1.cpplanta.duckdns.org.
-                IN      A       10.0.1.10  ; Replace with your manager node IP
+                IN      A       10.0.1.10  ; Internal IP for manager node
 
-ns1             IN      A       10.0.1.10  ; Replace with your manager node IP
-www             IN      A       10.0.1.10
-api             IN      A       10.0.1.10
-pgadmin         IN      A       10.0.1.10
+ns1             IN      A       10.0.1.10
+www             IN      CNAME   @
+api             IN      CNAME   @
+pgadmin         IN      CNAME   @
+viz             IN      CNAME   @
 
-; Backend services (internal)
+; Internal service discovery
 postgres        IN      A       10.0.1.10
+postgres-replica IN     A       10.0.1.11  ; Assuming this is your worker node IP
 pgbouncer       IN      A       10.0.1.10
 backend         IN      A       10.0.1.10
 frontend        IN      A       10.0.1.10
