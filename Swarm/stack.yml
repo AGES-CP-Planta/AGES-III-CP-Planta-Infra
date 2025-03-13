@@ -113,7 +113,6 @@ services:
     networks:
       - backend_network
     deploy:
-      replicas: 2
       # Use global to place one instance on each node
       mode: global
       resources:
@@ -305,7 +304,7 @@ services:
         constraints:
           - node.role == manager
       labels:
-        - "traefik.enable=true".e
+        - "traefik.enable=true"
         - "traefik.http.routers.visualizer.rule=Host(`viz.cpplanta.duckdns.org`)"
         - "traefik.http.routers.visualizerntrypoints=websecure"
         - "traefik.http.routers.visualizer.tls.certresolver=myresolver"

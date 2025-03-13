@@ -7,361 +7,401 @@
     ansible_python_interpreter: /usr/bin/python3
 
   tasks:
-    # Debug task to help troubleshoot variable issues
-    - name: Debug inventory and host information
-      debug:
-        msg:
-          - "Current host: {{ inventory_hostname }}"
-          - "Manager node: {{ manager_node }}"
-          - "Is manager: {{ inventory_hostname == manager_node }}"
-          - "Manager IP: {{ hostvars[manager_node].ansible_host | default(manager_node) }}"
-          
-    # Docker setup tasks remain the same
-    - name: Remove old Docker versions
-      apt:
-        name:
-          - docker
-          - docker-engine
-          - docker.io
-          - containerd
-          - runc
-        state: absent
-        update_cache: yes
-      become: yes
+  # Debug task to help troubleshoot variable issues
+  - name: Debug inventory and host information
+    debug:
+      msg:
+        - "Current host: {{ inventory_hostname }}"
+        - "Manager node: {{ manager_node }}"
+        - "Is manager: {{ inventory_hostname == manager_node }}"
+        - "Manager IP: {{ hostvars[manager_node].ansible_host | default(manager_node) }}"
+        
+  # Docker setup tasks remain the same
+  - name: Remove old Docker versions
+    apt:
+      name:
+        - docker
+        - docker-engine
+        - docker.io
+        - containerd
+        - runc
+      state: absent
+      update_cache: yes
+    become: yes
 
-    - name: Install dependencies
-      apt:
-        name:
-          - curl
-          - ca-certificates
-          - git
-          - acl
-          - python3
-          - python3-pip
-          - lsb-release
-        state: present
-        update_cache: yes
-      become: yes
+  - name: Install dependencies
+    apt:
+      name:
+        - curl
+        - ca-certificates
+        - git
+        - acl
+        - python3
+        - python3-pip
+        - lsb-release
+      state: present
+      update_cache: yes
+    become: yes
 
-    - name: Add Docker's official GPG key and save it in the recommended keyring
-      ansible.builtin.shell: |
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-      become: yes
-      args:
-        creates: /usr/share/keyrings/docker-archive-keyring.gpg
-      ignore_errors: yes
+  - name: Add Docker's official GPG key and save it in the recommended keyring
+    ansible.builtin.shell: |
+      curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+    become: yes
+    args:
+      creates: /usr/share/keyrings/docker-archive-keyring.gpg
+    ignore_errors: yes
 
-    - name: Add Docker's repository
-      ansible.builtin.shell: |
-        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu jammy stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-      become: yes
-      ignore_errors: yes
+  - name: Add Docker's repository
+    ansible.builtin.shell: |
+      echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu jammy stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    become: yes
+    ignore_errors: yes
 
-    - name: Update apt cache
-      ansible.builtin.apt:
-        update_cache: yes
-      become: yes
+  - name: Update apt cache
+    ansible.builtin.apt:
+      update_cache: yes
+    become: yes
 
-    - name: Install Docker packages
-      apt:
-        name:
-          - docker-ce
-          - docker-ce-cli
-          - containerd.io
-        state: present
-        update_cache: yes
-      become: yes
+  - name: Install Docker packages
+    apt:
+      name:
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io
+      state: present
+      update_cache: yes
+    become: yes
 
-    - name: Install Docker SDK for Python
-      apt:
-        name: python3-docker
-        state: present
-      become: yes
+  - name: Install Docker SDK for Python
+    apt:
+      name: python3-docker
+      state: present
+    become: yes
 
-    - name: Add users to the Docker group
-      user:
-        name: "{{ item }}"
-        groups: docker
-        append: yes
-      loop:
-        - "{{ ansible_ssh_user }}"
-      ignore_errors: yes
+  - name: Add users to the Docker group
+    user:
+      name: "{{ item }}"
+      groups: docker
+      append: yes
+    loop:
+      - "{{ ansible_ssh_user }}"
+    ignore_errors: yes
 
-    - name: Ensure Docker service is running
-      systemd:
-        name: docker
-        state: started
-        enabled: true
-      become: yes
+  - name: Ensure Docker service is running
+    systemd:
+      name: docker
+      state: started
+      enabled: true
+    become: yes
 
-    # Configure Docker daemon with proper resource settings
-    - name: Create Docker daemon.json directory
-      file:
-        path: /etc/docker
-        state: directory
-        mode: '0755'
-      become: yes
+  # Configure Docker daemon with proper resource settings
+  - name: Create Docker daemon.json directory
+    file:
+      path: /etc/docker
+      state: directory
+      mode: '0755'
+    become: yes
 
-    - name: Configure Docker daemon
-      copy:
-        content: |
-          {
-            "log-driver": "json-file",
-            "log-opts": {
-              "max-size": "10m",
-              "max-file": "3"
-            },
-            "default-address-pools": [
-              {
-                "base": "172.80.0.0/16",
-                "size": 24
-              }
-            ],
-            "metrics-addr": "0.0.0.0:9323",
-            "experimental": true
-          }
-        dest: /etc/docker/daemon.json
-      become: yes
-      register: docker_config
+  - name: Configure Docker daemon
+    copy:
+      content: |
+        {
+          "log-driver": "json-file",
+          "log-opts": {
+            "max-size": "10m",
+            "max-file": "3"
+          },
+          "default-address-pools": [
+            {
+              "base": "172.80.0.0/16",
+              "size": 24
+            }
+          ],
+          "metrics-addr": "0.0.0.0:9323",
+          "experimental": true
+        }
+      dest: /etc/docker/daemon.json
+    become: yes
+    register: docker_config
 
-    - name: Restart Docker service if config changed
-      systemd:
-        name: docker
-        state: restarted
-      when: docker_config.changed
-      become: yes
+  - name: Restart Docker service if config changed
+    systemd:
+      name: docker
+      state: restarted
+    when: docker_config.changed
+    become: yes
 
-    # Handle swarm initialization for the manager node
-    - name: Initialize Swarm on manager node
-      docker_swarm:
-        state: present
-        advertise_addr: "{{ ansible_default_ipv4.address }}"
-      when: inventory_hostname == manager_node
-      register: swarm_init
-      ignore_errors: no
+  # Handle swarm initialization for the manager node
+  - name: Initialize Swarm on manager node
+    docker_swarm:
+      state: present
+      advertise_addr: "{{ ansible_default_ipv4.address }}"
+    when: inventory_hostname == manager_node
+    register: swarm_init
+    ignore_errors: no
 
-    # Only run the following on the manager after swarm init is successful
-    - name: Get swarm join tokens
-      docker_swarm_info:
-      register: swarm_info
-      when: inventory_hostname == manager_node and swarm_init is defined and swarm_init.changed
-      
-    # Debug task to show swarm information
-    - name: Debug swarm information
-      debug:
-        var: swarm_info
-      when: inventory_hostname == manager_node and swarm_info is defined
-      
-    # Ensure manager node IP is gathered for workers to use
-    - name: Set manager IP fact for workers to use
-      set_fact:
-        manager_ip: "{{ ansible_default_ipv4.address }}"
-      when: inventory_hostname == manager_node
-      
-    # Share the manager IP with all nodes
-    - name: Share manager IP with all nodes
-      set_fact:
-        manager_ip: "{{ hostvars[manager_node]['manager_ip'] }}"
-      when: 
-        - inventory_hostname != manager_node
-        - hostvars[manager_node]['manager_ip'] is defined
-      
-    # Join workers to swarm (only run on workers)
-    - name: Join workers to Swarm
-      docker_swarm:
-        state: present
-        join_token: "{{ hostvars[manager_node]['swarm_info']['swarm_facts']['JoinTokens']['Worker'] }}"
-        remote_addrs:
-          - "{{ hostvars[manager_node]['manager_ip'] }}"
-      when:
-        - inventory_hostname != manager_node
-        - hostvars[manager_node]['swarm_info'] is defined
-        - hostvars[manager_node]['swarm_info']['swarm_facts'] is defined
-      ignore_errors: yes
-
-    # Add node labels for better workload distribution
-    - name: Set role label on manager node
-      command: docker node update --label-add role=manager {{ hostvars[manager_node]['ansible_hostname'] }}
-      delegate_to: "{{ manager_node }}"
-      run_once: true
-      ignore_errors: yes
-
-    - name: Label worker nodes
-      command: docker node update --label-add role=worker {{ hostvars[item]['ansible_hostname'] }}
-      loop: "{{ groups['instance2'] }}"
-      delegate_to: "{{ manager_node }}"
-      run_once: true
-      ignore_errors: yes
-
-    # Set worker node resource availability to ensure proper scheduling
-    - name: Set worker availability to active
-      command: docker node update --availability active {{ hostvars[item]['ansible_hostname'] }}
-      loop: "{{ groups['instance2'] }}"
-      delegate_to: "{{ manager_node }}"
-      run_once: true
-      ignore_errors: yes
-
-    # Set resource labels on nodes for workload distribution
-    - name: Set frontend workload label on first worker
-      command: docker node update --label-add workload=frontend {{ hostvars[first_worker]['ansible_hostname'] }}
-      delegate_to: "{{ manager_node }}"
-      run_once: true
-      ignore_errors: yes
-
-    - name: Set database workload label on manager
-      command: docker node update --label-add workload=database {{ hostvars[manager_node]['ansible_hostname'] }}
-      delegate_to: "{{ manager_node }}"
-      run_once: true
-      ignore_errors: yes
-
-    # Copy DNS and stack configuration files 
-    - name: Copy stack.yml to manager
-      copy:
-        src: ./stack.yml
-        dest: /home/{{ ansible_ssh_user }}/stack.yml
-      delegate_to: "{{ manager_node }}"
-      run_once: true 
-      
-    # Copy DNS configuration files
-    - name: Create DNS directory structure on manager
-      file:
-        path: /home/{{ ansible_ssh_user }}/dns/zones
-        state: directory
-        mode: '0755'
-      delegate_to: "{{ manager_node }}"
-      run_once: true
-
-    - name: Copy Corefile to manager
-      copy:
-        src: ./Corefile
-        dest: /home/{{ ansible_ssh_user }}/dns/Corefile
-      delegate_to: "{{ manager_node }}"
-      run_once: true
-
-    - name: Copy zone file to manager
-      copy:
-        src: ./cpplanta.duckdns.org.db
-        dest: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
-      delegate_to: "{{ manager_node }}"
-      run_once: true
-
-    - name: Update zone file with manager IP
-      replace:
-        path: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
-        regexp: '10\.0\.1\.10'
-        replace: "{{ hostvars[manager_node]['manager_ip'] }}"
-      delegate_to: "{{ manager_node }}"
-      run_once: true
-
-    # Configure system limits for better container performance
-    - name: Set container limits in sysctl
-      sysctl:
-        name: "{{ item.name }}"
-        value: "{{ item.value }}"
-        state: present
-        reload: yes
-      with_items:
-        - { name: 'fs.file-max', value: '1000000' }
-        - { name: 'vm.max_map_count', value: '262144' }
-        - { name: 'net.core.somaxconn', value: '65535' }
-      become: yes
-
-    # Add ulimit settings for node user
-    - name: Set limits for node users
-      blockinfile:
-        path: /etc/security/limits.conf
-        block: |
-          {{ ansible_ssh_user }} soft nofile 1000000
-          {{ ansible_ssh_user }} hard nofile 1000000
-          {{ ansible_ssh_user }} soft nproc 65535
-          {{ ansible_ssh_user }} hard nproc 65535
-      become: yes
-
-    # Deploy the stack with better resource allocation
-    - name: Deploy the stack on manager (with force update)
-      shell: docker stack deploy --with-registry-auth --resolve-image always -c /home/{{ ansible_ssh_user }}/stack.yml CP-Planta
-      args:
-        chdir: /home/{{ ansible_ssh_user }}
-      delegate_to: "{{ manager_node }}"
-      run_once: true
-
-    # Wait for stack to be deployed before updating services
-    - name: Wait for initial deployment
-      pause:
-        seconds: 15
-
-    # Update services with resource constraints (will restart services with proper constraints)
-    - name: Update services with resource constraints
-      shell: |
-        docker service update --force {{ item }}
-      loop:
-        - CP-Planta_backend
-        - CP-Planta_frontend
-        - CP-Planta_postgres_primary
-        - CP-Planta_postgres_replica 
-        - CP-Planta_pgadmin           
-        - CP-Planta_pgbouncer
-        - CP-Planta_dns
-      delegate_to: "{{ manager_node }}"
-      run_once: true
-      async: 75  
-      poll: 0   
-      ignore_errors: yes
-
-    # Install monitoring tools
-    - name: Install monitoring tools (htop, ctop, etc)
-      apt:
-        name:
-          - htop
-          - iotop
-          - sysstat
-        state: present
-      become: yes
-
-    - name: Install ctop (container monitoring tool)
-      shell: |
-        wget -qO- https://azlux.fr/repo.gpg.key | sudo apt-key add -
-        echo "deb http://packages.azlux.fr/debian/ bullseye main" | sudo tee /etc/apt/sources.list.d/azlux.list
-        sudo apt update
-        sudo apt install -y ctop
-      args:
-        creates: /usr/bin/ctop
-      become: yes
-      ignore_errors: yes
-
-    - name: Wait for services to stabilize
-      retries: 10
-      delay: 5
-      shell: |
-        running_services=$(docker service ls --filter "desired-state=running" --filter "replicas=0" -q)
-        if [ -n "$running_services" ]; then
-          exit 1
-        fi
-      delegate_to: "{{ manager_node }}"
-      register: service_check
-      until: service_check.rc == 0
-      ignore_errors: yes
-
-    - name: Wait for 25 seconds to show proper service status
-      wait_for:
-        timeout: 25
-
-    - name: Show service status
-      command: docker service ls
-      delegate_to: "{{ manager_node }}"
-      run_once: true
-      register: service_status
+  # Only run the following on the manager after swarm init is successful
+  - name: Get swarm join tokens
+    docker_swarm_info:
+    register: swarm_info
+    when: inventory_hostname == manager_node and swarm_init is defined and swarm_init.changed
     
-    - name: Display service status
-      debug:
-        var: service_status.stdout_lines
-
-    - name: Show node resource utilization
-      command: docker node ls
-      delegate_to: "{{ manager_node }}"
-      run_once: true
-      register: node_status
+  # Debug task to show swarm information
+  - name: Debug swarm information
+    debug:
+      var: swarm_info
+    when: inventory_hostname == manager_node and swarm_info is defined
     
-    - name: Display node status
-      debug:
-        var: node_status.stdout_lines
+  # Ensure manager node IP is gathered for workers to use
+  - name: Set manager IP fact for workers to use
+    set_fact:
+      manager_ip: "{{ ansible_default_ipv4.address }}"
+    when: inventory_hostname == manager_node
+    
+  # Share the manager IP with all nodes
+  - name: Share manager IP with all nodes
+    set_fact:
+      manager_ip: "{{ hostvars[manager_node]['manager_ip'] }}"
+    when: 
+      - inventory_hostname != manager_node
+      - hostvars[manager_node]['manager_ip'] is defined
+    
+  # Join workers to swarm (only run on workers)
+  - name: Join workers to Swarm
+    docker_swarm:
+      state: present
+      join_token: "{{ hostvars[manager_node]['swarm_info']['swarm_facts']['JoinTokens']['Worker'] }}"
+      remote_addrs:
+        - "{{ hostvars[manager_node]['manager_ip'] }}"
+    when:
+      - inventory_hostname != manager_node
+      - hostvars[manager_node]['swarm_info'] is defined
+      - hostvars[manager_node]['swarm_info']['swarm_facts'] is defined
+    ignore_errors: yes
+
+  # Get actual Docker node IDs and use those for labeling
+  - name: Get actual Docker node IDs and details
+    shell: docker node ls --format '{% raw %}{{.ID}}\t{{.Hostname}}\t{{.Status}}\t{{.Availability}}\t{{.ManagerStatus}}{% endraw %}'
+    register: node_details
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Debug node details
+    debug:
+      var: node_details
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Parse node details
+    set_fact:
+      swarm_nodes: "{{ node_details.stdout_lines | map('split', '\t') | list }}"
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Identify manager node
+    set_fact:
+      manager_node_id: "{{ swarm_nodes | selectattr('4', 'search', 'Leader|Reachable') | map('first') | first }}"
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Identify worker nodes
+    set_fact:
+      worker_node_ids: "{{ swarm_nodes | rejectattr('4', 'search', 'Leader|Reachable') | map('first') | list }}"
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Debug manager and worker node IDs
+    debug:
+      msg:
+        - "Manager node ID: {{ manager_node_id }}"
+        - "Worker node IDs: {{ worker_node_ids }}"
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  # Add node labels using the actual Docker node IDs
+  - name: Set role label on manager node
+    command: docker node update --label-add role=manager {{ manager_node_id }}
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+    ignore_errors: yes
+
+  - name: Label worker nodes
+    command: docker node update --label-add role=worker {{ item }}
+    loop: "{{ worker_node_ids }}"
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+    ignore_errors: yes
+
+  # Set worker node resource availability to ensure proper scheduling
+  - name: Set worker availability to active
+    command: docker node update --availability active {{ item }}
+    loop: "{{ worker_node_ids }}"
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+    ignore_errors: yes
+
+  # Set resource labels on nodes for workload distribution (if workers exist)
+  - name: Set frontend workload label on first worker
+    command: docker node update --label-add workload=frontend {{ worker_node_ids[0] }}
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+    when: worker_node_ids | length > 0
+    ignore_errors: yes
+
+  - name: Set database workload label on manager
+    command: docker node update --label-add workload=database {{ manager_node_id }}
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+    ignore_errors: yes
+
+  # Copy DNS and stack configuration files 
+  - name: Copy stack.yml to manager
+    copy:
+      src: ./stack.yml
+      dest: /home/{{ ansible_ssh_user }}/stack.yml
+    delegate_to: "{{ manager_node }}"
+    run_once: true 
+    
+  # Copy DNS configuration files
+  - name: Create DNS directory structure on manager
+    file:
+      path: /home/{{ ansible_ssh_user }}/dns/zones
+      state: directory
+      mode: '0755'
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Copy Corefile to manager
+    copy:
+      src: ./Corefile
+      dest: /home/{{ ansible_ssh_user }}/dns/Corefile
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Copy zone file to manager
+    copy:
+      src: ./cpplanta.duckdns.org.db
+      dest: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Update zone file with manager IP
+    replace:
+      path: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
+      regexp: '10\.0\.1\.10'
+      replace: "{{ hostvars[manager_node]['manager_ip'] }}"
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  # Configure system limits for better container performance
+  - name: Set container limits in sysctl
+    sysctl:
+      name: "{{ item.name }}"
+      value: "{{ item.value }}"
+      state: present
+      reload: yes
+    with_items:
+      - { name: 'fs.file-max', value: '1000000' }
+      - { name: 'vm.max_map_count', value: '262144' }
+      - { name: 'net.core.somaxconn', value: '65535' }
+    become: yes
+
+  # Add ulimit settings for node user
+  - name: Set limits for node users
+    blockinfile:
+      path: /etc/security/limits.conf
+      block: |
+        {{ ansible_ssh_user }} soft nofile 1000000
+        {{ ansible_ssh_user }} hard nofile 1000000
+        {{ ansible_ssh_user }} soft nproc 65535
+        {{ ansible_ssh_user }} hard nproc 65535
+    become: yes
+
+  # Deploy the stack with better resource allocation
+  - name: Deploy the stack on manager (with force update)
+    shell: docker stack deploy --with-registry-auth --resolve-image always -c /home/{{ ansible_ssh_user }}/stack.yml CP-Planta
+    args:
+      chdir: /home/{{ ansible_ssh_user }}
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  # Wait for stack to be deployed before updating services
+  - name: Wait for initial deployment
+    pause:
+      seconds: 15
+
+  # Update services with resource constraints (will restart services with proper constraints)
+  - name: Update services with resource constraints
+    shell: |
+      docker service update --force {{ item }}
+    loop:
+      - CP-Planta_backend
+      - CP-Planta_frontend
+      - CP-Planta_postgres_primary
+      - CP-Planta_postgres_replica 
+      - CP-Planta_pgadmin           
+      - CP-Planta_pgbouncer
+      - CP-Planta_dns
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+    async: 75  
+    poll: 0   
+    ignore_errors: yes
+
+  # Install monitoring tools
+  - name: Install monitoring tools (htop, ctop, etc)
+    apt:
+      name:
+        - htop
+        - iotop
+        - sysstat
+      state: present
+    become: yes
+
+  - name: Install ctop (container monitoring tool)
+    shell: |
+      wget -qO- https://azlux.fr/repo.gpg.key | sudo apt-key add -
+      echo "deb http://packages.azlux.fr/debian/ bullseye main" | sudo tee /etc/apt/sources.list.d/azlux.list
+      sudo apt update
+      sudo apt install -y ctop
+    args:
+      creates: /usr/bin/ctop
+    become: yes
+    ignore_errors: yes
+
+  - name: Wait for services to stabilize
+    retries: 10
+    delay: 5
+    shell: |
+      running_services=$(docker service ls --filter "desired-state=running" --filter "replicas=0" -q)
+      if [ -n "$running_services" ]; then
+        exit 1
+      fi
+    delegate_to: "{{ manager_node }}"
+    register: service_check
+    until: service_check.rc == 0
+    ignore_errors: yes
+
+  - name: Wait for 25 seconds to show proper service status
+    wait_for:
+      timeout: 25
+
+  - name: Show service status
+    command: docker service ls
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+    register: service_status
+  
+  - name: Display service status
+    debug:
+      var: service_status.stdout_lines
+
+  - name: Show node resource utilization
+    command: docker node ls
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+    register: node_status
+  
+  - name: Display node status
+    debug:
+      var: node_status.stdout_lines
