@@ -74,7 +74,7 @@ fi
 # Determine the Terraform directory based on provider and regions
 if [[ "$PROVIDER" == "aws" ]]; then
     if [[ "$REGIONS" == "single" ]]; then
-        TF_DIR="SimpleTerraformAWS"
+        TF_DIR="TerraformAWS"
     else
         TF_DIR="TerraformAWS"
     fi

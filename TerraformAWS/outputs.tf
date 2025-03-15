@@ -1,14 +1,10 @@
-output "primary_region_instances" {
-  description = "Public IPs of instances in the primary region"
-  value       = local.primary_instance_ips
+# Output the public IPs of the instances
+output "instance_public_ips" {
+  value = local.instance_public_ips
 }
 
-output "secondary_region_instances" {
-  description = "Public IPs of instances in the secondary region"
-  value       = local.secondary_instance_ips
-}
-
-output "vpc_peering_connection_id" {
-  description = "ID of the VPC peering connection"
-  value       = aws_vpc_peering_connection.primary_to_secondary.id
+# Output the SSH private keys (marked as sensitive)
+output "instance_ssh_private_keys" {
+  value     = { for k, v in tls_private_key.instance_ssh_key : k => v.private_key_pem }
+  sensitive = true
 }

@@ -249,16 +249,12 @@ The Docker Swarm stack consists of the following services:
   - Replica nodes for read operations
   - Streaming replication for data consistency
 
-- **PgBouncer**: Database connection pooling
-  - Reduces PostgreSQL connection overhead
-  - Distributes database load
-  - Improves connection reliability
 
 ### Application Services
 
 - **Backend API**: Main application backend
   - Node.js-based API services
-  - Connected to PostgreSQL through PgBouncer
+  - Connected to PostgreSQL database
   - Exposed via Traefik on api.cpplanta.duckdns.org
 
 - **Frontend**: User interface
@@ -461,7 +457,7 @@ docker exec $(docker ps -q -f name=dns) dig @localhost cpplanta.duckdns.org
 | Issue | Possible Cause | Solution |
 |-------|---------------|----------|
 | Services not starting | Resource constraints | Increase VM size or reduce service constraints |
-| Database connection errors | PgBouncer configuration | Check connection string and connection pool settings |
+| Database connection errors | Check connection string and connection pool settings |
 | SSL certificate errors | Let's Encrypt rate limiting | Wait and retry, or use staging environment for testing |
 | Node communication issues | Security group rules | Ensure ports 2377, 7946, and 4789 are open between nodes |
 

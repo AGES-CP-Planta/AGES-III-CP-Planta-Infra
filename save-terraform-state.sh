@@ -62,9 +62,9 @@ done
 # Set terraform directory based on provider and regions
 if [[ "$PROVIDER" == "aws" ]]; then
     if [[ "$REGIONS" == "single" ]]; then
-        TERRAFORM_DIR="SimpleTerraformAWS"
-    else
         TERRAFORM_DIR="TerraformAWS"
+    else
+        TERRAFORM_DIR=""
     fi
 elif [[ "$PROVIDER" == "azure" ]]; then
     TERRAFORM_DIR="TerraformAzure"

@@ -114,7 +114,7 @@ if [[ "$FORCE_UPDATE" == "false" ]]; then
         fi
         
         if [[ "$SERVICE" == "all" || "$SERVICE" == "db" ]]; then
-            DB_CHANGES=$(git diff --name-only $LAST_DEPLOY HEAD -- "*postgres*" "*pgadmin*" "*pgbouncer*")
+            DB_CHANGES=$(git diff --name-only $LAST_DEPLOY HEAD -- "*postgres*" "*pgadmin*")
             if [[ -n "$DB_CHANGES" ]]; then
                 echo -e "${YELLOW}Database changes detected. Will update database services.${NC}"
                 UPDATE_DB=true
@@ -273,10 +273,10 @@ fi
 if [[ "$UPDATE_DB" == "true" ]]; then
     echo -e "${YELLOW}Updating database services...${NC}"
     if [[ "$REGIONS" == "multi" ]]; then
-        ansible -i ../$INVENTORY_FILE primary_region --limit 1 -m shell -a "docker service update --force ${PRIMARY_STACK}_postgres_primary ${PRIMARY_STACK}_postgres_replica ${PRIMARY_STACK}_pgadmin ${PRIMARY_STACK}_pgbouncer" --become
-        ansible -i ../$INVENTORY_FILE secondary_region --limit 1 -m shell -a "docker service update --force ${SECONDARY_STACK}_postgres_replica ${SECONDARY_STACK}_pgadmin ${SECONDARY_STACK}_pgbouncer" --become
+        ansible -i ../$INVENTORY_FILE primary_region --limit 1 -m shell -a "docker service update --force ${PRIMARY_STACK}_postgres  ${PRIMARY_STACK}_pgadmin" --become
+        ansible -i ../$INVENTORY_FILE secondary_region --limit 1 -m shell -a "docker service update --force ${SECONDARY_STACK}_pgadmin" --become
     else
-        ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service update --force ${PRIMARY_STACK}_postgres_primary ${PRIMARY_STACK}_postgres_replica ${PRIMARY_STACK}_pgadmin ${PRIMARY_STACK}_pgbouncer" --become
+        ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service update --force ${PRIMARY_STACK}_postgres  ${PRIMARY_STACK}_pgadmin" --become
     fi
 fi
 

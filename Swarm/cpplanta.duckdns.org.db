@@ -18,7 +18,5 @@ viz             IN      CNAME   @
 
 ; Internal service discovery
 postgres        IN      A       10.0.1.10
-postgres-replica IN     A       10.0.1.11  ; Assuming this is your worker node IP
-pgbouncer       IN      A       10.0.1.10
 backend         IN      A       10.0.1.10
 frontend        IN      A       10.0.1.10

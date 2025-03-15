@@ -84,7 +84,7 @@ CP-Planta-Infra/
 
 - **Infrastructure**: AWS EC2 or Azure VMs with appropriate networking
 - **Orchestration**: Docker Swarm for container management
-- **Database**: PostgreSQL (primary + replica) with PgBouncer
+- **Database**: PostgreSQL database
 - **Frontend**: React-based UI
 - **Backend**: Node.js API
 - **Reverse Proxy**: Traefik with automatic SSL

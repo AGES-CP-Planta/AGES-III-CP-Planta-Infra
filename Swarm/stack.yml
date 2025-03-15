@@ -9,9 +9,12 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
       - "--certificatesresolvers.myresolver.acme.email=sacilotto.andre@gmail.com"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+      - "--log.level=DEBUG"
     ports:
       - "80:80"
       - "443:443"
@@ -21,7 +24,6 @@ services:
     networks:
       - traefik_network
     deploy:
-      # Traefik needs o run on manager for Docker socket access
       placement:
         constraints:
           - node.role == manager
@@ -38,25 +40,21 @@ services:
         - "traefik.http.routers.dashboard.service=api@internal"
         - "traefik.http.routers.dashboard.entrypoints=websecure"
         - "traefik.http.routers.dashboard.middlewares=auth"
-        - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$uyBtMQYo$$TMK6XINUQz.mLxjdJsl1j."  # admin:password
+        - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$uyBtMQYo$$TMK6XINUQz.mLxjdJsl1j."
+        - "traefik.http.services.traefik-svc.loadbalancer.server.port=8080"
 
-  postgres_primary:
-    image: norohim/postgres-optimal:latest
+  postgres:
+    image: postgres:15
     environment:
-      - ROLE=primary
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=postgres
-      - NODE_ID=1
-      - NODE_NAME=primary
-      - NODE_HOST=postgres_primary
     volumes:
-      - primary_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - backend_network
     deploy:
       replicas: 1
-      # Primary DB should be on manager for reliability
       placement:
         constraints:
           - node.role == manager
@@ -73,81 +71,27 @@ services:
         - "traefik.enable=false"
     ports:
       - "5432:5432"
-
-  postgres_replica:
-    image: norohim/postgres-optimal:latest
-    environment:
-      - ROLE=replica
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=postgres
-      - NODE_ID=2
-      - NODE_NAME=replica1
-      - NODE_HOST=postgres_replica
-      - REPLICATE_FROM=postgres_primary
-    volumes:
-      - replica_data:/var/lib/postgresql/data
-    networks:
-      - backend_network
-    depends_on:
-      - postgres_primary
-    deploy:
-      replicas: 1
-      # Place replica on worker to distribute DB load 
-      placement:
-        constraints:
-          - node.role == worker
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 256M
-      restart_policy:
-        condition: any
-      labels:
-        - "traefik.enable=false"
-    ports:
-      - "5433:5432"
-
-  pgbouncer:
-    image: norohim/pgbouncer:latest
-    environment:
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
-    networks:
-      - backend_network
-    deploy:
-      # Use global to place one instance on each node
-      mode: global
-      resources:
-        limits:
-          cpus: '0.20'
-          memory: 128M
-        reservations:
-          cpus: '0.05'
-          memory: 64M
-      restart_policy:
-        condition: any
-      labels:
-        - "traefik.enable=false"
-    ports:
-      - "6432:6432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     image: norohim/cp-planta-backend:latest
     environment:
       - NODE_ENV=production
-      - DB_HOST=pgbouncer
-      - DB_PORT=6432
+      - DB_HOST=postgres
+      - DB_PORT=5432
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - DB_NAME=postgres
-      - DATABASE_URL=postgresql://postgres:postgres@pgbouncer:6432/postgres
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/postgres
     networks:
       - backend_network
       - traefik_network
+    depends_on:
+      - postgres
     deploy:
       replicas: 1
       placement:
@@ -176,28 +120,28 @@ services:
       - "3000:3000"
         
   pgadmin:
-    image: norohim/pgadmin:latest
+    image: dpage/pgadmin4:latest
     environment:
       - PGADMIN_DEFAULT_EMAIL=sacilotto.andre@gmail.com
       - PGADMIN_DEFAULT_PASSWORD=SecurePassword123
+      - PGADMIN_LISTEN_PORT=5050
     depends_on:
-      - postgres_primary
+      - postgres
     networks:
       - backend_network
       - traefik_network
     deploy:
       replicas: 1
-      # Preferably on worker to distribute admin tools
       placement:
-        preferences:
-          - spread: node.role
+        constraints:
+          - node.role == worker
       resources:
         limits:
-          cpus: '0.20'
-          memory: 128M
+          cpus: '0.30'
+          memory: 256M
         reservations:
-          cpus: '0.05'
-          memory: 32M
+          cpus: '0.10'
+          memory: 128M
       restart_policy:
         condition: any
       labels:
@@ -205,7 +149,7 @@ services:
         - "traefik.http.routers.pgadmin.rule=Host(`pgadmin.cpplanta.duckdns.org`)"
         - "traefik.http.routers.pgadmin.entrypoints=websecure"
         - "traefik.http.routers.pgadmin.tls.certresolver=myresolver"
-        - "traefik.http.services.pgadmin.loadbalancer.server.port=80"
+        - "traefik.http.services.pgadmin.loadbalancer.server.port=5050"
     volumes:
       - pgadmin_data:/var/lib/pgadmin 
 
@@ -218,6 +162,8 @@ services:
     networks:
       - frontend_network
       - traefik_network
+    depends_on:
+      - backend
     deploy:
       replicas: 1
       placement:
@@ -254,7 +200,10 @@ services:
       - frontend_network
       - traefik_network
     deploy:
-      mode: global
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
       resources:
         limits:
           cpus: '0.20'
@@ -276,7 +225,7 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=America/Sao_Paulo  
-      - SUBDOMAINS=cpplanta,*.cpplanta
+      - SUBDOMAINS=cpplanta
       - TOKEN=ab25d043-0943-4338-88c7-315b3973ca90  
       - LOG_FILE=false
     networks:
@@ -325,9 +274,7 @@ networks:
     driver: overlay
 
 volumes:
-  primary_data:
-    driver: local
-  replica_data:
+  postgres_data:
     driver: local
   pgadmin_data:
     driver: local

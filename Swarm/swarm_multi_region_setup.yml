@@ -180,9 +180,7 @@
         - backend
         - frontend
         - postgres_primary
-        - postgres_replica 
         - pgadmin           
-        - pgbouncer 
       delegate_to: "{{ manager_node }}"
       run_once: true
       async: 75  
@@ -361,9 +359,8 @@
       loop:
         - backend
         - frontend
-        - postgres_replica 
+        - postgres
         - pgadmin           
-        - pgbouncer 
       delegate_to: "{{ manager_node }}"
       run_once: true
       async: 75  

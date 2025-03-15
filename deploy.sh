@@ -242,7 +242,7 @@ if [[ "$SKIP_TERRAFORM" == "false" ]]; then
 
     if [[ "$PROVIDER" == "aws" ]]; then
         if [[ "$REGIONS" == "single" ]]; then
-            cd SimpleTerraformAWS
+            cd TerraformAWS
         else
             cd TerraformAWS
         fi
@@ -350,7 +350,7 @@ echo -e "${YELLOW}You should now be able to access your services at the provided
 if [[ "$PROVIDER" == "aws" ]]; then
     if [[ "$REGIONS" == "single" ]]; then
         echo -e "${BLUE}AWS Instance IPs:${NC}"
-        jq -r '.resources[] | select(.type == "aws_instance") | .instances[] | .attributes.public_ip' SimpleTerraformAWS/terraform.tfstate
+        jq -r '.resources[] | select(.type == "aws_instance") | .instances[] | .attributes.public_ip' TerraformAWS/terraform.tfstate
     else
         echo -e "${BLUE}AWS Multi-Region Instance IPs:${NC}"
         echo -e "${YELLOW}Primary Region:${NC}"
