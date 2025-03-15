@@ -316,4 +316,21 @@ elif [[ "$PROVIDER" == "azure" ]]; then
     jq -r '.resources[] | select(.type == "azurerm_virtual_machine") | .instances[] | .attributes.public_ip_address' TerraformAzure/terraform.tfstate
 fi
 
+echo -e "${YELLOW}Updating DNS records...${NC}"
+./duckdns-updater.sh
+
+echo -e "${YELLOW}Verifying DNS resolution...${NC}"
+# Wait for DNS propagation
+sleep 30
+
+# Check external DNS resolution
+for domain in cpplanta.duckdns.org api.cpplanta.duckdns.org pgadmin.cpplanta.duckdns.org viz.cpplanta.duckdns.org traefik.cpplanta.duckdns.org; do
+    echo -n "Checking $domain: "
+    if host $domain > /dev/null; then
+        echo -e "${GREEN}OK${NC}"
+    else
+        echo -e "${RED}Failed${NC}"
+    fi
+done
+
 exit 0

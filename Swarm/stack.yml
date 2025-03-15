@@ -262,8 +262,6 @@ services:
         - "traefik.http.routers.visualizer.entrypoints=websecure"
         - "traefik.http.routers.visualizer.tls.certresolver=myresolver"
         - "traefik.http.services.visualizer.loadbalancer.server.port=8080"
-    ports:
-      - "8080:8080"
 
 networks:
   backend_network:

@@ -15,8 +15,10 @@ www             IN      CNAME   @
 api             IN      CNAME   @
 pgadmin         IN      CNAME   @
 viz             IN      CNAME   @
+traefik         IN      CNAME   @
 
 ; Internal service discovery
 postgres        IN      A       10.0.1.10
 backend         IN      A       10.0.1.10
 frontend        IN      A       10.0.1.10
+visualizer      IN      A       10.0.1.10
