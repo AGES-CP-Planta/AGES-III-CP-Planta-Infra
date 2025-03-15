@@ -4,7 +4,7 @@ locals {
 
 locals {
   inventory_content = join("\n\n", [
-    for name, ip in local.vm_public_ips : "[${name}]\n${ip} ansible_ssh_user=${var.username} ansible_ssh_private_key_file=./ssh_keys/${name}.pem"
+    for name, ip in local.vm_public_ips : "[${name}]\n${ip} ansible_ssh_user=${var.username} ansible_ssh_private_key_file=../ssh_keys/${name}.pem"
   ])
 }
 

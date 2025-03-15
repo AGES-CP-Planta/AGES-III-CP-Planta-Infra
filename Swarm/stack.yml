@@ -3,6 +3,7 @@ services:
     image: traefik:v2.9
     command:
       - "--api.insecure=false"
+      - "--api.dashboard=true"
       - "--providers.docker=true"
       - "--providers.docker.swarmMode=true"
       - "--providers.docker.exposedbydefault=false"
@@ -33,6 +34,11 @@ services:
           memory: 128M
       labels:
         - "traefik.enable=true"
+        - "traefik.http.routers.dashboard.rule=Host(`traefik.cpplanta.duckdns.org`)"
+        - "traefik.http.routers.dashboard.service=api@internal"
+        - "traefik.http.routers.dashboard.entrypoints=websecure"
+        - "traefik.http.routers.dashboard.middlewares=auth"
+        - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$uyBtMQYo$$TMK6XINUQz.mLxjdJsl1j."  # admin:password
 
   postgres_primary:
     image: norohim/postgres-optimal:latest
@@ -87,7 +93,7 @@ services:
       - postgres_primary
     deploy:
       replicas: 1
-      # Place replica on worker to distribute DB load and for failover readiness
+      # Place replica on worker to distribute DB load 
       placement:
         constraints:
           - node.role == worker
@@ -143,8 +149,7 @@ services:
       - backend_network
       - traefik_network
     deploy:
-      replicas: 2
-      # Distribute backend across both manager and worker
+      replicas: 1
       placement:
         preferences:
           - spread: node.role
@@ -188,11 +193,11 @@ services:
           - spread: node.role
       resources:
         limits:
-          cpus: '0.30'
-          memory: 256M
+          cpus: '0.20'
+          memory: 128M
         reservations:
-          cpus: '0.10'
-          memory: 96M
+          cpus: '0.05'
+          memory: 32M
       restart_policy:
         condition: any
       labels:
@@ -214,8 +219,7 @@ services:
       - frontend_network
       - traefik_network
     deploy:
-      replicas: 2
-      # Distribute frontend across both nodes
+      replicas: 1
       placement:
         preferences:
           - spread: node.role
@@ -272,7 +276,7 @@ services:
       - PUID=1000
       - PGID=1000
       - TZ=America/Sao_Paulo  
-      - SUBDOMAINS=cpplanta
+      - SUBDOMAINS=cpplanta,*.cpplanta
       - TOKEN=ab25d043-0943-4338-88c7-315b3973ca90  
       - LOG_FILE=false
     networks:
@@ -306,7 +310,7 @@ services:
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.visualizer.rule=Host(`viz.cpplanta.duckdns.org`)"
-        - "traefik.http.routers.visualizerntrypoints=websecure"
+        - "traefik.http.routers.visualizer.entrypoints=websecure"
         - "traefik.http.routers.visualizer.tls.certresolver=myresolver"
         - "traefik.http.services.visualizer.loadbalancer.server.port=8080"
     ports:

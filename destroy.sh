@@ -63,6 +63,12 @@ done
 if [[ -f .env ]]; then
     echo -e "${YELLOW}Loading environment variables from .env file...${NC}"
     export $(grep -v '^#' .env | xargs)
+
+    
+    # Export Terraform-specific variables
+    if [[ "$PROVIDER" == "azure" ]]; then
+        export TF_VAR_azure_subscription_id="$AZURE_SUBSCRIPTION_ID"
+    fi
 fi
 
 # Determine the Terraform directory based on provider and regions
