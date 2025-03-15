@@ -1,8 +1,5 @@
 # CP-Planta Infrastructure
 
-[![Simple Deployment Update](https://github.com/Saccilotto-AGES-Projects/AGES-III-CP-Planta-Infra/actions/workflows/auto-update.yml/badge.svg)](https://github.com/Saccilotto-AGES-Projects/AGES-III-CP-Planta-Infra/blob/main/.github/workflows/auto-update.yml)
-[![Full Infrastructure Deployment](https://github.com/Saccilotto-AGES-Projects/AGES-III-CP-Planta-Infra/actions/workflows/full_deployment.yml/badge.svg)](https://github.com/Saccilotto-AGES-Projects/AGES-III-CP-Planta-Infra/blob/main/.github/workflows/full_deployment.yml)
-
 Cloud-agnostic Infrastructure as Code (IaC) and Configuration as Code (CaC) for the CP-Planta application, supporting AWS and Azure platforms with Docker Swarm orchestration.
 
 ## Overview
@@ -10,21 +7,14 @@ Cloud-agnostic Infrastructure as Code (IaC) and Configuration as Code (CaC) for 
 CP-Planta Infrastructure provides an automated deployment pipeline for a containerized application stack with:
 
 - **Multi-cloud support**: Deploy to AWS or Azure with the same code base
-- **High availability**: Single or multi-region deployments with failover capability
-- **Containerization**: Docker Swarm orchestration with service replication
-- **Database resilience**: PostgreSQL with primary-replica replication
+- **High availability**: Docker Swarm orchestration with service replication
+- **Database resilience**: PostgreSQL with primary setup
 - **Automated DevOps**: GitHub Actions workflows for CI/CD
 - **Secure access**: Automatic SSL certificate generation via Let's Encrypt
 
-## Architecture Diagrams
+## Architecture Diagram
 
-### Simple Infrastructure Diagram (AWS or Azure)
-
-![Simple Infrastructure Diagram](./docs/images/single-region-diagram.svg)
-
-### Multi-Region Infrastructure Diagram (AWS)
-
-![Multi Region Infrastructure Diagram](./docs/images/multi-region-diagram.svg)
+![Infrastructure Diagram](./docs/images/single-region-diagram.svg)
 
 ## Quick Start
 
@@ -56,10 +46,10 @@ CP-Planta Infrastructure provides an automated deployment pipeline for a contain
 
    ```bash
    # For AWS
-   ./deploy.sh --provider aws --regions single
+   ./deploy.sh --provider aws
    
    # For Azure
-   ./deploy.sh --provider azure --regions single
+   ./deploy.sh --provider azure
    ```
 
 4. Access your application via the displayed endpoints.
@@ -71,9 +61,8 @@ CP-Planta-Infra/
 ├── .github/workflows/     # GitHub Actions workflows
 ├── ssh_keys/              # Generated SSH keys (gitignored)
 ├── Swarm/                 # Docker Swarm configuration
-├── TerraformAWSSingle/    # Single-region AWS config
-├── TerraformAWS/          # Multi-region AWS config
-├── TerraformAzure/        # Azure config for single region
+├── TerraformAWS/          # AWS infrastructure configuration
+├── TerraformAzure/        # Azure infrastructure configuration
 ├── *.sh                   # Deployment and utility scripts
 ├── *.md                   # Documentation
 ├── .env                   # Environment variables (gitignored)

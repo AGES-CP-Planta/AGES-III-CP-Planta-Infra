@@ -8,8 +8,8 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # DuckDNS configuration
-DUCKDNS_TOKEN="ab25d043-0943-4338-88c7-315b3973ca90"
-DOMAINS=("cpplanta" "api.cpplanta" "pgadmin.cpplanta")
+DUCKDNS_TOKEN="$DUCKDNS_TOKEN"
+DOMAINS=("cpplanta" "api.cpplanta" "pgadmin.cpplanta" "traefik.cpplanta" "viz.cpplanta")
 
 # Get server's public IP
 SERVER_IP=$(curl -s https://api.ipify.org)

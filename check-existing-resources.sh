@@ -9,7 +9,6 @@ NC='\033[0m' # No Color
 
 # Default values
 PROVIDER="aws"
-REGIONS="single"
 ACTION="check"  # check, import, delete, rename
 TERRAFORM_DIR=""
 
@@ -20,11 +19,10 @@ function show_help {
     echo ""
     echo -e "Options:"
     echo -e "  -p, --provider    Specify cloud provider (aws or azure), default: aws"
-    echo -e "  -r, --regions     Specify region mode (single or multi), default: single"
     echo -e "  -a, --action      Action to perform (check, import, delete, rename), default: check"
     echo -e "  -h, --help        Show this help message"
     echo ""
-    echo -e "Example: ./check-existing-resources.sh --provider aws --regions single --action import"
+    echo -e "Example: ./check-existing-resources.sh --provider aws --action import"
 }
 
 # Parse command line arguments
@@ -32,10 +30,6 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -p|--provider)
             PROVIDER="$2"
-            shift 2
-            ;;
-        -r|--regions)
-            REGIONS="$2"
             shift 2
             ;;
         -a|--action)
@@ -54,13 +48,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Set terraform directory based on provider and regions
+# Set terraform directory based on provider
 if [[ "$PROVIDER" == "aws" ]]; then
-    if [[ "$REGIONS" == "single" ]]; then
-        TERRAFORM_DIR="TerraformAWS"
-    else
-        TERRAFORM_DIR=""
-    fi
+    TERRAFORM_DIR="TerraformAWS"
 elif [[ "$PROVIDER" == "azure" ]]; then
     TERRAFORM_DIR="TerraformAzure"
 fi
@@ -78,128 +68,119 @@ cd "$TERRAFORM_DIR"
 if [[ "$PROVIDER" == "aws" ]]; then
     echo -e "${YELLOW}Checking for existing AWS key pairs...${NC}"
     
-    # Get instance names from variables.tf (for single region)
-    if [[ "$REGIONS" == "single" ]]; then
-        # Extract instance names array from variables.tf
-        INSTANCE_NAMES=$(grep -A5 'variable "instance_names"' variables.tf | grep 'default' | sed 's/.*default.*\[\(.*\)\].*/\1/' | sed 's/"//g' | sed 's/,/ /g')
-        REGION=$(grep -A2 'variable "region"' variables.tf | grep 'default' | sed 's/.*default.*"\(.*\)".*/\1/')
+    # Extract instance names array from variables.tf
+    INSTANCE_NAMES=$(grep -A5 'variable "instance_names"' variables.tf | grep 'default' | sed 's/.*default.*\[\(.*\)\].*/\1/' | sed 's/"//g' | sed 's/,/ /g')
+    REGION=$(grep -A2 'variable "region"' variables.tf | grep 'default' | sed 's/.*default.*"\(.*\)".*/\1/')
+    
+    # Check for each key pair
+    for instance in $INSTANCE_NAMES; do
+        KEY_NAME="${instance}-key"
+        echo -e "Checking for key pair: ${BLUE}$KEY_NAME${NC} in region ${BLUE}$REGION${NC}"
         
-        # Check for each key pair
-        for instance in $INSTANCE_NAMES; do
-            KEY_NAME="${instance}-key"
-            echo -e "Checking for key pair: ${BLUE}$KEY_NAME${NC} in region ${BLUE}$REGION${NC}"
+        # Check if key pair exists
+        KEY_EXISTS=$(aws ec2 describe-key-pairs --region "$REGION" --key-names "$KEY_NAME" 2>/dev/null)
+        if [[ $? -eq 0 ]]; then
+            echo -e "${GREEN}Key pair $KEY_NAME exists${NC}"
             
-            # Check if key pair exists
-            KEY_EXISTS=$(aws ec2 describe-key-pairs --region "$REGION" --key-names "$KEY_NAME" 2>/dev/null)
-            if [[ $? -eq 0 ]]; then
-                echo -e "${GREEN}Key pair $KEY_NAME exists${NC}"
-                
-                # Perform action based on specified option
-                case "$ACTION" in
-                    check)
-                        echo -e "${YELLOW}Key pair $KEY_NAME exists and might cause conflicts during Terraform apply${NC}"
-                        ;;
-                    import)
-                        echo -e "${YELLOW}Importing key pair $KEY_NAME into Terraform state...${NC}"
-                        terraform state rm "aws_key_pair.generated_key[\"$instance\"]" 2>/dev/null
-                        terraform import "aws_key_pair.generated_key[\"$instance\"]" "$KEY_NAME"
-                        ;;
-                    delete)
-                        echo -e "${YELLOW}Deleting key pair $KEY_NAME...${NC}"
-                        aws ec2 delete-key-pair --region "$REGION" --key-name "$KEY_NAME"
-                        ;;
-                    rename)
-                        NEW_KEY_NAME="${KEY_NAME}-$(date +%s)"
-                        echo -e "${YELLOW}Cannot directly rename key pairs in AWS. Recommend using delete or import actions.${NC}"
-                        ;;
-                esac
-            else
-                echo -e "${BLUE}Key pair $KEY_NAME does not exist${NC}"
-            fi
-        done
-    else
-        # For multi-region setup
-        PRIMARY_REGION=$(grep -A2 'variable "primary_region"' variables.tf | grep 'default' | sed 's/.*default.*"\(.*\)".*/\1/')
-        SECONDARY_REGION=$(grep -A2 'variable "secondary_region"' variables.tf | grep 'default' | sed 's/.*default.*"\(.*\)".*/\1/')
-        
-        # Extract instance names for each region
-        INSTANCE_NAMES=$(grep -A10 'variable "instance_names"' variables.tf | grep -A10 'default' | grep -o '"[^"]*"' | sed 's/"//g')
-        
-        # Check primary region instances
-        echo -e "${YELLOW}Checking primary region ($PRIMARY_REGION) key pairs...${NC}"
-        for instance in $INSTANCE_NAMES; do
-            KEY_NAME="${instance}-key"
-            echo -e "Checking for key pair: ${BLUE}$KEY_NAME${NC} in region ${BLUE}$PRIMARY_REGION${NC}"
-            
-            # Check if key pair exists in primary region
-            KEY_EXISTS=$(aws ec2 describe-key-pairs --region "$PRIMARY_REGION" --key-names "$KEY_NAME" 2>/dev/null)
-            if [[ $? -eq 0 ]]; then
-                echo -e "${GREEN}Key pair $KEY_NAME exists in $PRIMARY_REGION${NC}"
-                
-                # Perform action based on specified option
-                case "$ACTION" in
-                    check)
-                        echo -e "${YELLOW}Key pair $KEY_NAME exists and might cause conflicts during Terraform apply${NC}"
-                        ;;
-                    import)
-                        echo -e "${YELLOW}Importing key pair $KEY_NAME into Terraform state...${NC}"
-                        terraform state rm "aws_key_pair.primary_key_pair[\"$instance\"]" 2>/dev/null
-                        terraform import "aws_key_pair.primary_key_pair[\"$instance\"]" "$KEY_NAME"
-                        ;;
-                    delete)
-                        echo -e "${YELLOW}Deleting key pair $KEY_NAME from $PRIMARY_REGION...${NC}"
-                        aws ec2 delete-key-pair --region "$PRIMARY_REGION" --key-name "$KEY_NAME"
-                        ;;
-                    rename)
-                        echo -e "${YELLOW}Cannot directly rename key pairs in AWS. Recommend using delete or import actions.${NC}"
-                        ;;
-                esac
-            else
-                echo -e "${BLUE}Key pair $KEY_NAME does not exist in $PRIMARY_REGION${NC}"
-            fi
-        done
-        
-        # Check secondary region instances
-        echo -e "${YELLOW}Checking secondary region ($SECONDARY_REGION) key pairs...${NC}"
-        for instance in $INSTANCE_NAMES; do
-            KEY_NAME="${instance}-key"
-            echo -e "Checking for key pair: ${BLUE}$KEY_NAME${NC} in region ${BLUE}$SECONDARY_REGION${NC}"
-            
-            # Check if key pair exists in secondary region
-            KEY_EXISTS=$(aws ec2 describe-key-pairs --region "$SECONDARY_REGION" --key-names "$KEY_NAME" 2>/dev/null)
-            if [[ $? -eq 0 ]]; then
-                echo -e "${GREEN}Key pair $KEY_NAME exists in $SECONDARY_REGION${NC}"
-                
-                # Perform action based on specified option
-                case "$ACTION" in
-                    check)
-                        echo -e "${YELLOW}Key pair $KEY_NAME exists and might cause conflicts during Terraform apply${NC}"
-                        ;;
-                    import)
-                        echo -e "${YELLOW}Importing key pair $KEY_NAME into Terraform state...${NC}"
-                        terraform state rm "aws_key_pair.secondary_key_pair[\"$instance\"]" 2>/dev/null
-                        terraform import "aws_key_pair.secondary_key_pair[\"$instance\"]" "$KEY_NAME"
-                        ;;
-                    delete)
-                        echo -e "${YELLOW}Deleting key pair $KEY_NAME from $SECONDARY_REGION...${NC}"
-                        aws ec2 delete-key-pair --region "$SECONDARY_REGION" --key-name "$KEY_NAME"
-                        ;;
-                    rename)
-                        echo -e "${YELLOW}Cannot directly rename key pairs in AWS. Recommend using delete or import actions.${NC}"
-                        ;;
-                esac
-            else
-                echo -e "${BLUE}Key pair $KEY_NAME does not exist in $SECONDARY_REGION${NC}"
-            fi
-        done
-    fi
+            # Perform action based on specified option
+            case "$ACTION" in
+                check)
+                    echo -e "${YELLOW}Key pair $KEY_NAME exists and might cause conflicts during Terraform apply${NC}"
+                    ;;
+                import)
+                    echo -e "${YELLOW}Importing key pair $KEY_NAME into Terraform state...${NC}"
+                    terraform state rm "aws_key_pair.generated_key[\"$instance\"]" 2>/dev/null
+                    terraform import "aws_key_pair.generated_key[\"$instance\"]" "$KEY_NAME"
+                    ;;
+                delete)
+                    echo -e "${YELLOW}Deleting key pair $KEY_NAME...${NC}"
+                    aws ec2 delete-key-pair --region "$REGION" --key-name "$KEY_NAME"
+                    ;;
+                rename)
+                    NEW_KEY_NAME="${KEY_NAME}-$(date +%s)"
+                    echo -e "${YELLOW}Cannot directly rename key pairs in AWS. Recommend using delete or import actions.${NC}"
+                    ;;
+            esac
+        else
+            echo -e "${BLUE}Key pair $KEY_NAME does not exist${NC}"
+        fi
+    done
 elif [[ "$PROVIDER" == "azure" ]]; then
     echo -e "${YELLOW}Checking for existing Azure resources...${NC}"
-    # Azure resource checking logic would go here
-    echo -e "${BLUE}Azure resource checking not implemented yet${NC}"
+    
+    # Extract VM names from variables.tf
+    VM_NAMES=$(grep -A5 'variable "vm_names"' variables.tf | grep 'default' | sed 's/.*default.*\[\(.*\)\].*/\1/' | sed 's/"//g' | sed 's/,/ /g')
+    RESOURCE_GROUP=$(grep -A2 'variable "resource_group_name"' variables.tf | grep 'default' | sed 's/.*default.*"\(.*\)".*/\1/')
+    
+    # First check if the resource group exists
+    echo -e "Checking for resource group: ${BLUE}$RESOURCE_GROUP${NC}"
+    RG_EXISTS=$(az group exists --name "$RESOURCE_GROUP")
+    
+    if [[ "$RG_EXISTS" == "true" ]]; then
+        echo -e "${GREEN}Resource group $RESOURCE_GROUP exists${NC}"
+        
+        # Check for VMs in the resource group
+        for vm in $VM_NAMES; do
+            echo -e "Checking for VM: ${BLUE}$vm${NC} in resource group ${BLUE}$RESOURCE_GROUP${NC}"
+            
+            # Check if VM exists
+            VM_EXISTS=$(az vm show --resource-group "$RESOURCE_GROUP" --name "$vm" --query "name" 2>/dev/null)
+            
+            if [[ -n "$VM_EXISTS" ]]; then
+                echo -e "${GREEN}VM $vm exists${NC}"
+                
+                # Perform action based on specified option
+                case "$ACTION" in
+                    check)
+                        echo -e "${YELLOW}VM $vm exists and might cause conflicts during Terraform apply${NC}"
+                        ;;
+                    import)
+                        echo -e "${YELLOW}Importing VM $vm into Terraform state...${NC}"
+                        terraform state rm "azurerm_linux_virtual_machine.vm[\"$vm\"]" 2>/dev/null
+                        terraform import "azurerm_linux_virtual_machine.vm[\"$vm\"]" "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Compute/virtualMachines/$vm"
+                        ;;
+                    delete)
+                        echo -e "${YELLOW}Deleting VM $vm...${NC}"
+                        az vm delete --resource-group "$RESOURCE_GROUP" --name "$vm" --yes
+                        ;;
+                    rename)
+                        echo -e "${YELLOW}Cannot directly rename VMs in Azure. Recommend using delete or import actions.${NC}"
+                        ;;
+                esac
+            else
+                echo -e "${BLUE}VM $vm does not exist${NC}"
+            fi
+        done
+        
+        # Optionally check for other resources like NSGs, NICs, etc.
+        echo -e "${YELLOW}Checking for network security group in $RESOURCE_GROUP...${NC}"
+        NSG_EXISTS=$(az network nsg list --resource-group "$RESOURCE_GROUP" --query "[?contains(name, 'cp-planta-nsg')].name" -o tsv)
+        
+        if [[ -n "$NSG_EXISTS" ]]; then
+            echo -e "${GREEN}Network security group $NSG_EXISTS exists${NC}"
+            
+            case "$ACTION" in
+                check)
+                    echo -e "${YELLOW}NSG $NSG_EXISTS exists and might cause conflicts during Terraform apply${NC}"
+                    ;;
+                import)
+                    echo -e "${YELLOW}Importing NSG $NSG_EXISTS into Terraform state...${NC}"
+                    terraform state rm "azurerm_network_security_group.nsg" 2>/dev/null
+                    terraform import "azurerm_network_security_group.nsg" "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Network/networkSecurityGroups/$NSG_EXISTS"
+                    ;;
+                delete)
+                    echo -e "${YELLOW}Deleting NSG $NSG_EXISTS...${NC}"
+                    az network nsg delete --resource-group "$RESOURCE_GROUP" --name "$NSG_EXISTS"
+                    ;;
+            esac
+        else
+            echo -e "${BLUE}No matching network security group found${NC}"
+        fi
+    else
+        echo -e "${BLUE}Resource group $RESOURCE_GROUP does not exist${NC}"
+    fi
 fi
 
-# Return to original directory
 cd ..
 
 echo -e "${GREEN}Resource check complete!${NC}"

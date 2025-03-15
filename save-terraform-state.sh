@@ -9,7 +9,6 @@ NC='\033[0m' # No Color
 
 # Default values
 PROVIDER="aws"
-REGIONS="single"
 ACTION="save"  # save or load
 STORAGE_TYPE="s3"  # s3, azure, or github
 
@@ -20,12 +19,11 @@ function show_help {
     echo ""
     echo -e "Options:"
     echo -e "  -p, --provider    Specify cloud provider (aws or azure), default: aws"
-    echo -e "  -r, --regions     Specify region mode (single or multi), default: single"
     echo -e "  -a, --action      Action to perform (save or load), default: save"
     echo -e "  -s, --storage     Storage type (s3, azure, or github), default: s3"
     echo -e "  -h, --help        Show this help message"
     echo ""
-    echo -e "Example: ./save-terraform-state.sh --provider aws --regions single --action save --storage s3"
+    echo -e "Example: ./save-terraform-state.sh --provider aws --action save --storage s3"
 }
 
 # Parse command line arguments
@@ -33,10 +31,6 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -p|--provider)
             PROVIDER="$2"
-            shift 2
-            ;;
-        -r|--regions)
-            REGIONS="$2"
             shift 2
             ;;
         -a|--action)
@@ -59,13 +53,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Set terraform directory based on provider and regions
+# Set terraform directory based on provider
 if [[ "$PROVIDER" == "aws" ]]; then
-    if [[ "$REGIONS" == "single" ]]; then
-        TERRAFORM_DIR="TerraformAWS"
-    else
-        TERRAFORM_DIR=""
-    fi
+    TERRAFORM_DIR="TerraformAWS"
 elif [[ "$PROVIDER" == "azure" ]]; then
     TERRAFORM_DIR="TerraformAzure"
 fi
@@ -245,9 +235,9 @@ function save_terraform_state {
         mkdir -p "${TERRAFORM_DIR}"
         
         # Copy the state file
-        cp "./${TERRAFORM_DIR}/terraform.tfstate" "${TERRAFORM_DIR}/"
-        if [[ -f "./${TERRAFORM_DIR}/terraform.tfstate.backup" ]]; then
-            cp "./${TERRAFORM_DIR}/terraform.tfstate.backup" "${TERRAFORM_DIR}/"
+        cp "../${TERRAFORM_DIR}/terraform.tfstate" "${TERRAFORM_DIR}/"
+        if [[ -f "../${TERRAFORM_DIR}/terraform.tfstate.backup" ]]; then
+            cp "../${TERRAFORM_DIR}/terraform.tfstate.backup" "${TERRAFORM_DIR}/"
         fi
         
         # Push the changes
@@ -338,12 +328,12 @@ function load_terraform_state {
         # Check if the state file exists
         if [[ -f "${TERRAFORM_DIR}/terraform.tfstate" ]]; then
             # Create the directory structure if it doesn't exist
-            mkdir -p "./${TERRAFORM_DIR}"
+            mkdir -p "../${TERRAFORM_DIR}"
             
             # Copy the state file
-            cp "${TERRAFORM_DIR}/terraform.tfstate" "./${TERRAFORM_DIR}/"
+            cp "${TERRAFORM_DIR}/terraform.tfstate" "../${TERRAFORM_DIR}/"
             if [[ -f "${TERRAFORM_DIR}/terraform.tfstate.backup" ]]; then
-                cp "${TERRAFORM_DIR}/terraform.tfstate.backup" "./${TERRAFORM_DIR}/"
+                cp "${TERRAFORM_DIR}/terraform.tfstate.backup" "../${TERRAFORM_DIR}/"
             fi
             
             cd - > /dev/null

@@ -96,18 +96,8 @@ CP-Planta-Infra/
 │   ├── ansible.cfg                  # Ansible configuration
 │   ├── stack.yml                    # Docker Swarm stack definition
 │   ├── dns/                         # DNS configuration files
-│   ├── templates/                   # Template files for multi-region
-│   └── swarm_setup.yml              # Ansible playbook for single-region
-│   └── swarm_multi_region_setup.yml # Ansible playbook for multi-region
-├── TerraformAWSSingle/              # Single-region AWS infrastructure
-│   ├── instance.tf                  # AWS EC2 instance configuration
-│   ├── inventory.tf                 # Generates Ansible inventory
-│   ├── main.tf                      # Main Terraform configuration
-│   ├── network.tf                   # AWS VPC and network configuration
-│   ├── outputs.tf                   # Terraform outputs
-│   ├── providers.tf                 # AWS provider configuration
-│   └── variables.tf                 # Variables for deployment
-├── TerraformAWSMulti/               # Multi-region AWS infrastructure
+│   └── swarm_setup.yml              # Ansible playbook for setting up Swarm
+├── TerraformAWS/                    # AWS infrastructure
 │   ├── instance.tf                  # AWS EC2 instance configuration
 │   ├── inventory.tf                 # Generates Ansible inventory
 │   ├── main.tf                      # Main Terraform configuration
@@ -136,20 +126,23 @@ CP-Planta-Infra/
 ├── README.md                        # Project overview
 ├── DEPLOYMENT.md                    # This detailed deployment guide
 ├── CLI-REFERENCE.md                 # Command-line reference
-├── static_ip.ini                    # Single-region inventory (generated)
-└── multi_region_inventory.ini       # Multi-region inventory (generated)
+└── static_ip.ini                    # Inventory file (generated)
 ```
 
 ## Deployment Options
 
-CP-Planta supports several deployment configurations to meet different needs:
+CP-Planta supports deployment to different cloud providers:
 
-### Single-Region Deployment (Default)
+### Single-Region Deployment
 
 A standard deployment with one manager node and one worker node in a single AWS region or Azure location.
 
 ```bash
-./deploy.sh --provider aws --regions single
+# For AWS
+./deploy.sh --provider aws
+
+# For Azure
+./deploy.sh --provider azure
 ```
 
 This setup provides:
@@ -159,32 +152,16 @@ This setup provides:
 - Simpler networking configuration
 - Faster deployment time
 
-### Multi-Region Deployment
-
-A disaster recovery setup with nodes in two regions for high availability.
-
-```bash
-./deploy.sh --provider aws --regions multi
-```
-
-This setup provides:
-
-- Geographic redundancy for disaster recovery
-- Cross-region database replication
-- Failover capability between regions
-- Higher availability for global access
-- Protection against regional outages
-
 ### Cloud Provider Selection
 
 The infrastructure can be deployed to either AWS or Azure with the same code base:
 
 ```bash
 # For AWS deployment
-./deploy.sh --provider aws --regions single
+./deploy.sh --provider aws
 
 # For Azure deployment
-./deploy.sh --provider azure --regions single
+./deploy.sh --provider azure
 ```
 
 ### Update Deployment
@@ -193,10 +170,10 @@ For updating existing infrastructure:
 
 ```bash
 # Update all services
-./update-deployment.sh --provider aws --regions single
+./update-deployment.sh --provider aws
 
 # Update specific service
-./update-deployment.sh --provider aws --regions single --service backend
+./update-deployment.sh --provider aws --service backend
 ```
 
 ### Destroy Infrastructure
@@ -204,26 +181,18 @@ For updating existing infrastructure:
 When you no longer need the infrastructure:
 
 ```bash
-./destroy.sh --provider aws --regions single
+./destroy.sh --provider aws
 ```
 
 ## Infrastructure Components
 
-### AWS Single-Region Infrastructure
+### AWS Infrastructure
 
 - VPC with public subnet
 - 2 EC2 instances (t2.small)
 - Security group with required ports
 - Elastic IPs for stable addressing
 - SSH key pairs for secure access
-
-### AWS Multi-Region Infrastructure
-
-- 2 VPCs in different regions
-- VPC peering for cross-region communication
-- 2+ EC2 instances per region
-- Region-specific security groups
-- Cross-region database replication
 
 ### Azure Infrastructure
 
@@ -246,9 +215,7 @@ The Docker Swarm stack consists of the following services:
 
 - **PostgreSQL**: Database layer
   - Primary node for write operations
-  - Replica nodes for read operations
-  - Streaming replication for data consistency
-
+  - Connected to application services
 
 ### Application Services
 
@@ -316,16 +283,16 @@ To update specific services without full redeployment:
 
 ```bash
 # Update all services
-./update-deployment.sh --provider aws --regions single
+./update-deployment.sh --provider aws
 
 # Update only backend
-./update-deployment.sh --provider aws --regions single --service backend
+./update-deployment.sh --provider aws --service backend
 
 # Update only frontend
-./update-deployment.sh --provider aws --regions single --service frontend
+./update-deployment.sh --provider aws --service frontend
 
 # Update only database services
-./update-deployment.sh --provider aws --regions single --service db
+./update-deployment.sh --provider aws --service db
 ```
 
 ### Scaling Services
@@ -346,7 +313,7 @@ To backup the PostgreSQL database:
 
 ```bash
 # On manager node
-docker exec $(docker ps -q -f name=postgres_primary) pg_dump -U postgres postgres > backup.sql
+docker exec $(docker ps -q -f name=postgres) pg_dump -U postgres postgres > backup.sql
 ```
 
 ### Adding Nodes to Swarm
@@ -368,11 +335,7 @@ docker swarm join --token <token> <manager-ip>:2377
 Check the status of your deployed services:
 
 ```bash
-# For single-region
 ansible -i static_ip.ini instance1 -m shell -a "docker service ls"
-
-# For multi-region
-ansible -i multi_region_inventory.ini primary_region -m shell -a "docker service ls"
 ```
 
 ### Resource Visualization
@@ -457,7 +420,7 @@ docker exec $(docker ps -q -f name=dns) dig @localhost cpplanta.duckdns.org
 | Issue | Possible Cause | Solution |
 |-------|---------------|----------|
 | Services not starting | Resource constraints | Increase VM size or reduce service constraints |
-| Database connection errors | Check connection string and connection pool settings |
+| Database connection errors | Wrong connection string | Check connection string and connection pool settings |
 | SSL certificate errors | Let's Encrypt rate limiting | Wait and retry, or use staging environment for testing |
 | Node communication issues | Security group rules | Ensure ports 2377, 7946, and 4789 are open between nodes |
 
@@ -482,7 +445,6 @@ Enhanced support for multi-cloud deployments:
 - Cross-cloud service discovery
 - Load balancing between clouds
 - Unified monitoring across providers
-- Automatic failover between cloud providers
 
 ### Infrastructure Expansion
 

@@ -9,22 +9,20 @@ NC='\033[0m' # No Color
 
 # Help function
 function show_help {
-    echo -e "${BLUE}Usage: ./terraform-destroy.sh [OPTIONS]${NC}"
+    echo -e "${BLUE}Usage: ./destroy.sh [OPTIONS]${NC}"
     echo -e "Destroy infrastructure on AWS or Azure using a specific Terraform state file"
     echo ""
     echo -e "Options:"
     echo -e "  -p, --provider    Specify cloud provider (aws or azure), default: aws"
-    echo -e "  -r, --regions     Specify region mode (single or multi), default: single"
     echo -e "  -s, --state       Path to an existing tfstate file to use (optional)"
     echo -e "  -y, --yes         Auto-approve destruction (no confirmation prompt)"
     echo -e "  -h, --help        Show this help message"
     echo ""
-    echo -e "Example: ./terraform-destroy.sh --provider aws --regions multi --state ./my-terraform.tfstate"
+    echo -e "Example: ./destroy.sh --provider aws --state ./my-terraform.tfstate"
 }
 
 # Default values
 PROVIDER="aws"
-REGIONS="single"
 STATE_FILE=""
 AUTO_APPROVE=false
 
@@ -33,10 +31,6 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -p|--provider)
             PROVIDER="$2"
-            shift 2
-            ;;
-        -r|--regions)
-            REGIONS="$2"
             shift 2
             ;;
         -s|--state)
@@ -71,13 +65,9 @@ if [[ -f .env ]]; then
     fi
 fi
 
-# Determine the Terraform directory based on provider and regions
+# Determine the Terraform directory based on provider
 if [[ "$PROVIDER" == "aws" ]]; then
-    if [[ "$REGIONS" == "single" ]]; then
-        TF_DIR="TerraformAWS"
-    else
-        TF_DIR="TerraformAWS"
-    fi
+    TF_DIR="TerraformAWS"
 elif [[ "$PROVIDER" == "azure" ]]; then
     TF_DIR="TerraformAzure"
 else

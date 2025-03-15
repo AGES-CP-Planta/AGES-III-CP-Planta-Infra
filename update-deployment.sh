@@ -14,18 +14,16 @@ function show_help {
     echo ""
     echo -e "Options:"
     echo -e "  -p, --provider    Specify cloud provider (aws or azure), default: aws"
-    echo -e "  -r, --regions     Specify region mode (single or multi), default: single"
     echo -e "  -s, --service     Specify service to update (all, frontend, backend, db), default: all"
     echo -e "  -f, --force       Force update even if no changes detected"
     echo -e "  -i, --infra       Update infrastructure (Terraform apply)"
     echo -e "  -h, --help        Show this help message"
     echo ""
-    echo -e "Example: ./update-deployment.sh --provider aws --regions multi --service backend"
+    echo -e "Example: ./update-deployment.sh --provider aws --service backend"
 }
 
 # Default values
 PROVIDER="aws"
-REGIONS="single"
 SERVICE="all"
 FORCE_UPDATE=false
 UPDATE_INFRA=false
@@ -35,10 +33,6 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -p|--provider)
             PROVIDER="$2"
-            shift 2
-            ;;
-        -r|--regions)
-            REGIONS="$2"
             shift 2
             ;;
         -s|--service)
@@ -150,11 +144,7 @@ if [[ "$UPDATE_INFRA" == "true" ]]; then
     echo -e "${YELLOW}Updating infrastructure with Terraform...${NC}"
     
     if [[ "$PROVIDER" == "aws" ]]; then
-        if [[ "$REGIONS" == "single" ]]; then
-            cd SimpleTerraformAWS
-        else
-            cd TerraformAWS
-        fi
+        cd TerraformAWS
     elif [[ "$PROVIDER" == "azure" ]]; then
         cd TerraformAzure
     fi
@@ -179,11 +169,7 @@ if [[ "$UPDATE_INFRA" == "true" ]]; then
 fi
 
 # Determine inventory file
-if [[ "$REGIONS" == "multi" ]]; then
-    INVENTORY_FILE="multi_region_inventory.ini"
-else
-    INVENTORY_FILE="static_ip.ini"
-fi
+INVENTORY_FILE="static_ip.ini"
 
 # Check if inventory file exists
 if [[ ! -f "$INVENTORY_FILE" ]]; then
@@ -195,12 +181,8 @@ fi
 # Update Swarm services
 cd Swarm
 
-# Determine the manager node based on regions mode
-if [[ "$REGIONS" == "multi" ]]; then
-    MANAGER_GROUP="primary_region"
-else
-    MANAGER_GROUP="instance1"
-fi
+# Determine the manager node
+MANAGER_GROUP="instance1"
 
 # Use Ansible to get the manager node IP
 MANAGER_IP=$(ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "hostname -I | awk '{print \$1}'" | grep -v "CHANGED" | tr -d '[:space:]')
@@ -213,14 +195,8 @@ fi
 echo -e "${YELLOW}Manager node IP: $MANAGER_IP${NC}"
 
 # Copy updated stack files if needed
-if [[ "$REGIONS" == "multi" ]]; then
-    echo -e "${YELLOW}Copying updated stack files to primary and secondary regions...${NC}"
-    ansible -i ../$INVENTORY_FILE primary_region --limit 1 -m template -a "src=./templates/stack_primary.yml.j2 dest=/home/{{ ansible_ssh_user }}/stack.yml" --become
-    ansible -i ../$INVENTORY_FILE secondary_region --limit 1 -m template -a "src=./templates/stack_secondary.yml.j2 dest=/home/{{ ansible_ssh_user }}/stack.yml" --become
-else
-    echo -e "${YELLOW}Copying updated stack file to manager node...${NC}"
-    ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m copy -a "src=./stack.yml dest=/home/{{ ansible_ssh_user }}/stack.yml" --become
-fi
+echo -e "${YELLOW}Copying updated stack file to manager node...${NC}"
+ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m copy -a "src=./stack.yml dest=/home/{{ ansible_ssh_user }}/stack.yml" --become
 
 # Update DNS configuration files if needed
 echo -e "${YELLOW}Updating DNS configuration...${NC}"
@@ -231,82 +207,43 @@ ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m copy -a "src=./cpplant
 # Update DNS zone file with manager IP
 ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m replace -a "path=/home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db regexp='10\\.0\\.1\\.10' replace='{{ ansible_default_ipv4.address }}'" --become
 
-# Redeploy the stacks
-if [[ "$REGIONS" == "multi" ]]; then
-    echo -e "${YELLOW}Redeploying stacks in primary and secondary regions...${NC}"
-    ansible -i ../$INVENTORY_FILE primary_region --limit 1 -m shell -a "cd /home/{{ ansible_ssh_user }} && docker stack deploy --with-registry-auth --resolve-image always -c stack.yml CP-Planta-Primary" --become
-    ansible -i ../$INVENTORY_FILE secondary_region --limit 1 -m shell -a "cd /home/{{ ansible_ssh_user }} && docker stack deploy --with-registry-auth --resolve-image always -c stack.yml CP-Planta-Secondary" --become
-else
-    echo -e "${YELLOW}Redeploying stack on manager node...${NC}"
-    ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "cd /home/{{ ansible_ssh_user }} && docker stack deploy --with-registry-auth --resolve-image always -c stack.yml CP-Planta" --become
-fi
+# Redeploy the stack
+echo -e "${YELLOW}Redeploying stack on manager node...${NC}"
+ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "cd /home/{{ ansible_ssh_user }} && docker stack deploy --with-registry-auth --resolve-image always -c stack.yml CP-Planta" --become
 
 # Update specific services if needed
 STACK_PREFIX="CP-Planta"
-if [[ "$REGIONS" == "multi" ]]; then
-    PRIMARY_STACK="CP-Planta-Primary"
-    SECONDARY_STACK="CP-Planta-Secondary"
-else
-    PRIMARY_STACK="CP-Planta"
-fi
 
 if [[ "$UPDATE_FRONTEND" == "true" ]]; then
     echo -e "${YELLOW}Updating frontend services...${NC}"
-    if [[ "$REGIONS" == "multi" ]]; then
-        ansible -i ../$INVENTORY_FILE primary_region --limit 1 -m shell -a "docker service update --force ${PRIMARY_STACK}_frontend" --become
-        ansible -i ../$INVENTORY_FILE secondary_region --limit 1 -m shell -a "docker service update --force ${SECONDARY_STACK}_frontend" --become
-    else
-        ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service update --force ${PRIMARY_STACK}_frontend" --become
-    fi
+    ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service update --force ${STACK_PREFIX}_frontend" --become
 fi
 
 if [[ "$UPDATE_BACKEND" == "true" ]]; then
     echo -e "${YELLOW}Updating backend services...${NC}"
-    if [[ "$REGIONS" == "multi" ]]; then
-        ansible -i ../$INVENTORY_FILE primary_region --limit 1 -m shell -a "docker service update --force ${PRIMARY_STACK}_backend" --become
-        ansible -i ../$INVENTORY_FILE secondary_region --limit 1 -m shell -a "docker service update --force ${SECONDARY_STACK}_backend" --become
-    else
-        ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service update --force ${PRIMARY_STACK}_backend" --become
-    fi
+    ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service update --force ${STACK_PREFIX}_backend" --become
 fi
 
 if [[ "$UPDATE_DB" == "true" ]]; then
     echo -e "${YELLOW}Updating database services...${NC}"
-    if [[ "$REGIONS" == "multi" ]]; then
-        ansible -i ../$INVENTORY_FILE primary_region --limit 1 -m shell -a "docker service update --force ${PRIMARY_STACK}_postgres  ${PRIMARY_STACK}_pgadmin" --become
-        ansible -i ../$INVENTORY_FILE secondary_region --limit 1 -m shell -a "docker service update --force ${SECONDARY_STACK}_pgadmin" --become
-    else
-        ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service update --force ${PRIMARY_STACK}_postgres  ${PRIMARY_STACK}_pgadmin" --become
-    fi
+    ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service update --force ${STACK_PREFIX}_postgres ${STACK_PREFIX}_pgadmin" --become
 fi
 
 # Update DNS service if needed
 echo -e "${YELLOW}Updating DNS service...${NC}"
-if [[ "$REGIONS" == "multi" ]]; then
-    ansible -i ../$INVENTORY_FILE primary_region --limit 1 -m shell -a "docker service update --force ${PRIMARY_STACK}_dns" --become
-    ansible -i ../$INVENTORY_FILE secondary_region --limit 1 -m shell -a "docker service update --force ${SECONDARY_STACK}_dns" --become
-else
-    ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service update --force ${PRIMARY_STACK}_dns" --become
-fi
+ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service update --force ${STACK_PREFIX}_dns" --become
 
 # Wait for services to stabilize
 echo -e "${YELLOW}Waiting for services to stabilize...${NC}"
 sleep 15
 
 # Show service status
-if [[ "$REGIONS" == "multi" ]]; then
-    echo -e "${YELLOW}Primary region service status:${NC}"
-    ansible -i ../$INVENTORY_FILE primary_region --limit 1 -m shell -a "docker service ls" --become
-    echo -e "${YELLOW}Secondary region service status:${NC}"
-    ansible -i ../$INVENTORY_FILE secondary_region --limit 1 -m shell -a "docker service ls" --become
-else
-    echo -e "${YELLOW}Service status:${NC}"
-    ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service ls" --become
-fi
+echo -e "${YELLOW}Service status:${NC}"
+ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service ls" --become
 
 # Update deployment marker
 git rev-parse HEAD > ../.last_deployment
 echo -e "${GREEN}Updated deployment marker to current commit.${NC}"
 
 cd ..
-echo -e "${GREEN}Update process completed on $PROVIDER using $REGIONS region mode.${NC}"
+echo -e "${GREEN}Update process completed on $PROVIDER.${NC}"

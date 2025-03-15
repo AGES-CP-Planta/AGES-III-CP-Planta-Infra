@@ -50,6 +50,7 @@ AWS_REQUIRED_SECRETS=(
     "PGADMIN_PASSWORD"
     "DOMAIN_NAME"
     "ACME_EMAIL"
+    "DUCKDNS_TOKEN"
 )
 
 AZURE_REQUIRED_SECRETS=(
@@ -58,6 +59,7 @@ AZURE_REQUIRED_SECRETS=(
     "PGADMIN_PASSWORD"
     "DOMAIN_NAME"
     "ACME_EMAIL"
+    "DUCKDNS_TOKEN"
 )
 
 # Parse command line arguments
@@ -129,6 +131,9 @@ DOMAIN_NAME=cp-planta.yourdomain.com
 ACME_EMAIL=your_email@example.com
 PGADMIN_EMAIL=your_email@example.com
 PGADMIN_PASSWORD=SecurePassword123
+
+# DuckDNS Configuration
+DUCKDNS_TOKEN=your_duckdns_token
 
 # Optional Configuration
 # DOCKER_REGISTRY_URL=registry.example.com

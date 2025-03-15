@@ -226,7 +226,7 @@ services:
       - PGID=1000
       - TZ=America/Sao_Paulo  
       - SUBDOMAINS=cpplanta
-      - TOKEN=ab25d043-0943-4338-88c7-315b3973ca90  
+      - TOKEN=${DUCKDNS_TOKEN}  
       - LOG_FILE=false
     networks:
       - traefik_network

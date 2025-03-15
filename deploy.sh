@@ -14,18 +14,16 @@ function show_help {
     echo ""
     echo -e "Options:"
     echo -e "  -p, --provider    Specify cloud provider (aws or azure), default: aws"
-    echo -e "  -r, --regions     Specify region mode (single or multi), default: single"
     echo -e "  -s, --skip-terraform Skip the Terraform provisioning step (use existing infrastructure)"
     echo -e "  -u, --update      Run in update mode (use update-deployment.sh if infrastructure exists)"
     echo -e "  --no-interactive   Run in non-interactive mode"
     echo -e "  -h, --help        Show this help message"
     echo ""
-    echo -e "Example: ./deploy.sh --provider aws --regions multi"
+    echo -e "Example: ./deploy.sh --provider aws"
 }
 
 # Default values
 PROVIDER="aws"
-REGIONS="single"
 SKIP_TERRAFORM=false
 CHECK_UPDATE=true
 INTERACTIVE=true 
@@ -35,10 +33,6 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -p|--provider)
             PROVIDER="$2"
-            shift 2
-            ;;
-        -r|--regions)
-            REGIONS="$2"
             shift 2
             ;;
         -s|--skip-terraform)
@@ -67,21 +61,13 @@ done
 
 # Check if this is an update to existing infrastructure
 if [[ "$CHECK_UPDATE" == "true" ]]; then
-    if [[ "$REGIONS" == "single" ]]; then
-        INVENTORY_FILE="static_ip.ini"
-    else
-        INVENTORY_FILE="multi_region_inventory.ini"
-    fi
+    INVENTORY_FILE="static_ip.ini"
     
     if [[ -f "$INVENTORY_FILE" ]]; then
         # Attempt to verify connectivity to existing infrastructure
         echo -e "${YELLOW}Detected existing inventory file. Checking if infrastructure exists...${NC}"
         
-        if [[ "$REGIONS" == "multi" ]]; then
-            MANAGER_GROUP="primary_region"
-        else
-            MANAGER_GROUP="instance1"
-        fi
+        MANAGER_GROUP="instance1"
         
         # Try to ping the first host in inventory with timeout
         FIRST_HOST=$(grep -m1 ansible_ssh_user $INVENTORY_FILE | awk '{print $1}')
@@ -95,7 +81,7 @@ if [[ "$CHECK_UPDATE" == "true" ]]; then
                 if [[ -f "update-deployment.sh" ]]; then
                     echo -e "${YELLOW}Running update-deployment.sh...${NC}"
                     chmod +x update-deployment.sh
-                    ./update-deployment.sh --provider $PROVIDER --regions $REGIONS
+                    ./update-deployment.sh --provider $PROVIDER
                     exit $?
                 else
                     echo -e "${RED}update-deployment.sh not found. Creating it...${NC}"
@@ -114,7 +100,6 @@ NC='\033[0m' # No Color
 
 # Default values
 PROVIDER="aws"
-REGIONS="single"
 SERVICE="all"
 
 # Parse command line arguments
@@ -122,10 +107,6 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -p|--provider)
             PROVIDER="$2"
-            shift 2
-            ;;
-        -r|--regions)
-            REGIONS="$2"
             shift 2
             ;;
         -s|--service)
@@ -145,11 +126,7 @@ if [[ -f .env ]]; then
 fi
 
 # Determine inventory file
-if [[ "$REGIONS" == "multi" ]]; then
-    INVENTORY_FILE="multi_region_inventory.ini"
-else
-    INVENTORY_FILE="static_ip.ini"
-fi
+INVENTORY_FILE="static_ip.ini"
 
 echo -e "${YELLOW}Updating Docker Swarm services...${NC}"
 cd Swarm
@@ -162,7 +139,7 @@ echo -e "${GREEN}Update completed successfully!${NC}"
 exit 0
 EOL
                     chmod +x update-deployment.sh
-                    ./update-deployment.sh --provider $PROVIDER --regions $REGIONS
+                    ./update-deployment.sh --provider $PROVIDER
                     exit $?
                 fi
             fi
@@ -193,7 +170,7 @@ if [[ "$SKIP_TERRAFORM" == "false" ]]; then
     chmod +x ./check-existing-resources.sh
     
     # First check if resources exist
-    ./check-existing-resources.sh --provider $PROVIDER --regions $REGIONS --action check
+    ./check-existing-resources.sh --provider $PROVIDER --action check
     
     if [ $? -eq 0 ]; then
         if [[ "$INTERACTIVE" == "true" ]]; then
@@ -209,11 +186,11 @@ if [[ "$SKIP_TERRAFORM" == "false" ]]; then
             case $RESOURCE_ACTION in
                 1)
                     echo -e "${YELLOW}Importing existing resources...${NC}"
-                    ./check-existing-resources.sh --provider $PROVIDER --regions $REGIONS --action import
+                    ./check-existing-resources.sh --provider $PROVIDER --action import
                     ;;
                 2)
                     echo -e "${YELLOW}Deleting existing resources...${NC}"
-                    ./check-existing-resources.sh --provider $PROVIDER --regions $REGIONS --action delete
+                    ./check-existing-resources.sh --provider $PROVIDER --action delete
                     ;;
                 3)
                     echo -e "${YELLOW}Skipping Terraform provisioning...${NC}"
@@ -230,22 +207,18 @@ if [[ "$SKIP_TERRAFORM" == "false" ]]; then
         else
             # Non-interactive mode - assume default action (import)
             echo -e "${YELLOW}Running in non-interactive mode. Importing existing resources...${NC}"
-            ./check-existing-resources.sh --provider $PROVIDER --regions $REGIONS --action import
+            ./check-existing-resources.sh --provider $PROVIDER --action import
         fi
     fi
 fi
 
 # Provision infrastructure with Terraform if not skipped
 if [[ "$SKIP_TERRAFORM" == "false" ]]; then
-    echo -e "${BLUE}Selected provider: $PROVIDER, Regions: $REGIONS${NC}"
+    echo -e "${BLUE}Selected provider: $PROVIDER${NC}"
     echo -e "${YELLOW}Running Terraform for $PROVIDER...${NC}"
 
     if [[ "$PROVIDER" == "aws" ]]; then
-        if [[ "$REGIONS" == "single" ]]; then
-            cd TerraformAWS
-        else
-            cd TerraformAWS
-        fi
+        cd TerraformAWS
         terraform init
         
         # Check if terraform plan works before applying
@@ -304,60 +277,40 @@ chmod 400 ssh_keys/*.pem
 echo -e "${YELLOW}Deploying Docker Swarm stack...${NC}"
 cd Swarm
 
-if [[ "$REGIONS" == "multi" ]]; then
-    echo -e "${YELLOW}Using multi-region configuration...${NC}"
-    ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i ../multi_region_inventory.ini ./swarm_multi_region_setup.yml 
+echo -e "${YELLOW}Using single-region configuration...${NC}"
+ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i ../static_ip.ini ./swarm_setup.yml 
+
+if [ $? -ne 0 ]; then
+    echo -e "${RED}Error: Swarm setup playbook encountered errors.${NC}"
+    echo -e "${YELLOW}Checking Docker Swarm status on manager node...${NC}"
     
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}Error: Multi-region setup playbook encountered errors.${NC}"
-        echo -e "${YELLOW}Trying to continue anyway...${NC}"
+    # Extract manager IP and key from inventory
+    manager_ip=$(grep -A1 '\[instance1\]' ../static_ip.ini | tail -n1 | awk '{print $1}')
+    manager_key=$(grep -A1 '\[instance1\]' ../static_ip.ini | tail -n1 | grep -o 'ansible_ssh_private_key_file=[^ ]*' | cut -d= -f2)
+    
+    # Check if Docker Swarm is running on manager
+    ssh -i $manager_key ubuntu@$manager_ip "docker node ls" 2>/dev/null
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}Docker Swarm appears to be running despite errors. You may need to check specific services.${NC}"
     else
-        echo -e "${GREEN}Multi-region deployment completed successfully!${NC}"
+        echo -e "${RED}Docker Swarm does not appear to be running. Please check logs and resolve issues.${NC}"
     fi
 else
-    echo -e "${YELLOW}Using single-region configuration...${NC}"
-    ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i ../static_ip.ini ./swarm_setup.yml 
-    
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}Error: Swarm setup playbook encountered errors.${NC}"
-        echo -e "${YELLOW}Checking Docker Swarm status on manager node...${NC}"
-        
-        # Extract manager IP and key from inventory
-        manager_ip=$(grep -A1 '\[instance1\]' ../static_ip.ini | tail -n1 | awk '{print $1}')
-        manager_key=$(grep -A1 '\[instance1\]' ../static_ip.ini | tail -n1 | grep -o 'ansible_ssh_private_key_file=[^ ]*' | cut -d= -f2)
-        
-        # Check if Docker Swarm is running on manager
-        ssh -i $manager_key ubuntu@$manager_ip "docker node ls" 2>/dev/null
-        
-        if [ $? -eq 0 ]; then
-            echo -e "${GREEN}Docker Swarm appears to be running despite errors. You may need to check specific services.${NC}"
-        else
-            echo -e "${RED}Docker Swarm does not appear to be running. Please check logs and resolve issues.${NC}"
-        fi
-    else
-        echo -e "${GREEN}Single-region deployment completed successfully!${NC}"
-    fi
+    echo -e "${GREEN}Deployment completed successfully!${NC}"
 fi
 
 # Save current git commit as deployment marker
 git rev-parse HEAD > ../.last_deployment 2>/dev/null || echo "unable to create deployment marker" > ../.last_deployment
 
 cd ..
-echo -e "${GREEN}Deployment process completed on $PROVIDER using $REGIONS region mode.${NC}"
+echo -e "${GREEN}Deployment process completed on $PROVIDER.${NC}"
 echo -e "${YELLOW}You should now be able to access your services at the provided endpoints.${NC}"
 
 # Display node IPs for user reference
 if [[ "$PROVIDER" == "aws" ]]; then
-    if [[ "$REGIONS" == "single" ]]; then
-        echo -e "${BLUE}AWS Instance IPs:${NC}"
-        jq -r '.resources[] | select(.type == "aws_instance") | .instances[] | .attributes.public_ip' TerraformAWS/terraform.tfstate
-    else
-        echo -e "${BLUE}AWS Multi-Region Instance IPs:${NC}"
-        echo -e "${YELLOW}Primary Region:${NC}"
-        jq -r '.resources[] | select(.type == "aws_instance" and .name == "primary_region_instances") | .instances[] | .attributes.public_ip' TerraformAWS/terraform.tfstate
-        echo -e "${YELLOW}Secondary Region:${NC}"
-        jq -r '.resources[] | select(.type == "aws_instance" and .name == "secondary_region_instances") | .instances[] | .attributes.public_ip' TerraformAWS/terraform.tfstate
-    fi
+    echo -e "${BLUE}AWS Instance IPs:${NC}"
+    jq -r '.resources[] | select(.type == "aws_instance") | .instances[] | .attributes.public_ip' TerraformAWS/terraform.tfstate
 elif [[ "$PROVIDER" == "azure" ]]; then
     echo -e "${BLUE}Azure VM IPs:${NC}"
     jq -r '.resources[] | select(.type == "azurerm_virtual_machine") | .instances[] | .attributes.public_ip_address' TerraformAzure/terraform.tfstate

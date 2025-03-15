@@ -43,20 +43,17 @@ Manages sensitive configuration data securely.
 Primary script for infrastructure provisioning and application deployment.
 
 ```bash
-# Deploy to AWS (single region)
-./deploy.sh --provider aws --regions single
-
-# Deploy to AWS (multi-region)
-./deploy.sh --provider aws --regions multi
+# Deploy to AWS
+./deploy.sh --provider aws
 
 # Deploy to Azure
-./deploy.sh --provider azure --regions single
+./deploy.sh --provider azure
 
 # Skip Terraform provisioning
-./deploy.sh --provider aws --regions single --skip-terraform
+./deploy.sh --provider aws --skip-terraform
 
 # Non-interactive deployment
-./deploy.sh --provider aws --regions single --no-interactive
+./deploy.sh --provider aws --no-interactive
 ```
 
 ### update-deployment.sh
@@ -65,22 +62,22 @@ Updates existing infrastructure and services without full redeployment.
 
 ```bash
 # Update all services
-./update-deployment.sh --provider aws --regions single
+./update-deployment.sh --provider aws
 
 # Update only frontend services
-./update-deployment.sh --provider aws --regions single --service frontend
+./update-deployment.sh --provider aws --service frontend
 
 # Update only backend services
-./update-deployment.sh --provider aws --regions single --service backend
+./update-deployment.sh --provider aws --service backend
 
 # Update only database services
-./update-deployment.sh --provider aws --regions single --service db
+./update-deployment.sh --provider aws --service db
 
 # Update infrastructure with Terraform
-./update-deployment.sh --provider aws --regions single --infra
+./update-deployment.sh --provider aws --infra
 
 # Force update all services
-./update-deployment.sh --provider aws --regions single --service all --force
+./update-deployment.sh --provider aws --service all --force
 ```
 
 ## Infrastructure Management
@@ -90,14 +87,14 @@ Updates existing infrastructure and services without full redeployment.
 Identifies and manages existing cloud resources that might conflict with deployment.
 
 ```bash
-# Check for existing AWS resources in single region
-./check-existing-resources.sh --provider aws --regions single --action check
+# Check for existing AWS resources
+./check-existing-resources.sh --provider aws --action check
 
 # Import existing resources into Terraform state
-./check-existing-resources.sh --provider aws --regions multi --action import
+./check-existing-resources.sh --provider aws --action import
 
 # Delete existing resources
-./check-existing-resources.sh --provider aws --regions single --action delete
+./check-existing-resources.sh --provider aws --action delete
 ```
 
 ### save-terraform-state.sh
@@ -106,16 +103,16 @@ Manages Terraform state files for team collaboration.
 
 ```bash
 # Save state to S3
-./save-terraform-state.sh --provider aws --regions single --action save --storage s3
+./save-terraform-state.sh --provider aws --action save --storage s3
 
 # Save state to Azure Blob
-./save-terraform-state.sh --provider azure --regions single --action save --storage azure
+./save-terraform-state.sh --provider azure --action save --storage azure
 
 # Save state to GitHub
-./save-terraform-state.sh --provider aws --regions multi --action save --storage github
+./save-terraform-state.sh --provider aws --action save --storage github
 
 # Load state from S3
-./save-terraform-state.sh --provider aws --regions single --action load --storage s3
+./save-terraform-state.sh --provider aws --action load --storage s3
 ```
 
 ### destroy.sh
@@ -123,20 +120,17 @@ Manages Terraform state files for team collaboration.
 Destroys infrastructure to avoid ongoing cloud charges.
 
 ```bash
-# Destroy AWS single-region infrastructure
-./destroy.sh --provider aws --regions single
-
-# Destroy AWS multi-region infrastructure
-./destroy.sh --provider aws --regions multi
+# Destroy AWS infrastructure
+./destroy.sh --provider aws
 
 # Destroy Azure infrastructure
-./destroy.sh --provider azure --regions single
+./destroy.sh --provider azure
 
 # Use specific state file
-./destroy.sh --provider aws --regions single --state ./path/to/terraform.tfstate
+./destroy.sh --provider aws --state ./path/to/terraform.tfstate
 
 # Auto-approve destruction (no confirmation)
-./destroy.sh --provider aws --regions single --yes
+./destroy.sh --provider aws --yes
 ```
 
 ## Service Management
@@ -237,7 +231,7 @@ Direct Terraform commands for advanced operations:
 
 ```bash
 # Initialize Terraform
-cd TerraformAWSSingle
+cd TerraformAWS
 terraform init
 
 # See planned changes
@@ -309,7 +303,7 @@ az network public-ip list --query "[].{Name:name,IPAddress:ipAddress,Status:prov
 gh workflow list
 
 # Run a workflow
-gh workflow run full_deployment.yml -f provider=aws -f regions=single -f environment=production
+gh workflow run full_deployment.yml -f provider=aws -f environment=production
 
 # View workflow runs
 gh run list --workflow=full_deployment.yml
@@ -367,17 +361,17 @@ docker service update --limit-cpu 0.5 --limit-memory 512M CP-Planta_backend
 PostgreSQL database management commands:
 
 ```bash
-# Connect to primary database
-docker exec -it $(docker ps -q -f name=postgres_primary) psql -U postgres
+# Connect to database
+docker exec -it $(docker ps -q -f name=postgres) psql -U postgres
 
 # Create database backup
-docker exec $(docker ps -q -f name=postgres_primary) pg_dump -U postgres postgres > backup.sql
+docker exec $(docker ps -q -f name=postgres) pg_dump -U postgres postgres > backup.sql
 
 # Restore database from backup
-cat backup.sql | docker exec -i $(docker ps -q -f name=postgres_primary) psql -U postgres postgres
+cat backup.sql | docker exec -i $(docker ps -q -f name=postgres) psql -U postgres postgres
 
-# Check replication status
-docker exec -it $(docker ps -q -f name=postgres_primary) psql -U postgres -c "SELECT * FROM pg_stat_replication;"
+# Check database status
+docker exec -it $(docker ps -q -f name=postgres) psql -U postgres -c "SELECT version();"
 ```
 
 ## Load Balancing
