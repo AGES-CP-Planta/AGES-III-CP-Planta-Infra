@@ -1,5 +1,6 @@
 services:
   traefik:
+    # Unchanged - existing configuration
     image: traefik:v2.9
     command:
       - "--api.insecure=false"
@@ -44,7 +45,7 @@ services:
         - "traefik.http.services.traefik-svc.loadbalancer.server.port=8080"
 
   postgres:
-    image: postgres:15
+    image: norohim/postgres-optimal:latest
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
@@ -67,6 +68,8 @@ services:
           memory: 256M
       restart_policy:
         condition: any
+        delay: 10s
+        max_attempts: 5
       labels:
         - "traefik.enable=false"
     ports:
@@ -76,6 +79,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
   backend:
     image: norohim/cp-planta-backend:latest
@@ -87,6 +91,10 @@ services:
       - DB_PASSWORD=postgres
       - DB_NAME=postgres
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/postgres
+      # Additional environment variables for Prisma
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
     networks:
       - backend_network
       - traefik_network
@@ -106,16 +114,20 @@ services:
           memory: 192M
       restart_policy:
         condition: any
+        delay: 10s
+        max_attempts: 5
       update_config:
         parallelism: 1
         delay: 10s
         order: start-first
+        failure_action: rollback
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.backend.rule=Host(`api.cpplanta.duckdns.org`)"
         - "traefik.http.routers.backend.entrypoints=websecure"
         - "traefik.http.routers.backend.tls.certresolver=myresolver"
         - "traefik.http.services.backend.loadbalancer.server.port=3000"
+    entrypoint: ["/bin/sh", "-c", "sleep 30 && node /app/dist/main.js"] # Wait for postgres to initialize
     ports:
       - "3000:3000"
         
