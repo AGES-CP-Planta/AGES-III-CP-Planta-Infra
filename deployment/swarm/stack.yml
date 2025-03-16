@@ -44,14 +44,20 @@ services:
         - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$uyBtMQYo$$TMK6XINUQz.mLxjdJsl1j."
         - "traefik.http.services.traefik-svc.loadbalancer.server.port=8080"
 
-  postgres:
+  # PostgreSQL Primary Node
+  postgres_primary:
     image: norohim/postgres-optimal:latest
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=postgres
+      - ROLE=primary
+      - NODE_ID=1
+      - NODE_NAME=primary
+      - NODE_HOST=${PRIMARY_HOST:-postgres_primary}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_primary_data:/var/lib/postgresql/data
+      - ./repmgr.conf:/etc/repmgr.conf
     networks:
       - backend_network
     deploy:
@@ -81,73 +87,144 @@ services:
       retries: 5
       start_period: 30s
 
+  # PostgreSQL Replica Node
+  postgres_replica:
+    image: norohim/postgres-optimal:latest
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+      - ROLE=replica
+      - NODE_ID=2
+      - NODE_NAME=replica
+      - NODE_HOST=${REPLICA_HOST:-postgres_replica}
+      - REPLICATE_FROM=${PRIMARY_HOST:-postgres_primary}
+    volumes:
+      - postgres_replica_data:/var/lib/postgresql/data
+      - ./repmgr.conf:/etc/repmgr.conf
+    networks:
+      - backend_network
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == worker
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+      labels:
+        - "traefik.enable=false"
+    ports:
+      - "5433:5432"
+    depends_on:
+      - postgres_primary
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # PgBouncer Connection Pooler
+  pgbouncer:
+    image: norohim/pgbouncer:latest
+    volumes:
+      - ./pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini
+      - ./userlist.txt:/etc/pgbouncer/userlist.txt
+    networks:
+      - backend_network
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: '0.30'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
+      restart_policy:
+        condition: any
+        delay: 5s
+      labels:
+        - "traefik.enable=false"
+    ports:
+      - "6432:6432"
+    depends_on:
+      - postgres_primary
+      - postgres_replica
+
   backend:
-      image: norohim/cp-planta-backend:latest
-      environment:
-        - NODE_ENV=production
-        - PORT=3000
-        # Enhanced database connection
-        - DB_HOST=postgres
-        - DB_PORT=5432
-        - DB_USER=postgres
-        - DB_PASSWORD=postgres
-        - DB_NAME=postgres
-        - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/postgres
-        # Add for health check script
-        - POSTGRES_USER=postgres
-        - POSTGRES_PASSWORD=postgres
-        - POSTGRES_DB=postgres
-        # Add service discovery environment variables
-        - FRONTEND_URL=https://cpplanta.duckdns.org
-        - API_URL=https://api.cpplanta.duckdns.org
-      networks:
-        - backend_network
-        - traefik_network
-      depends_on:
-        - postgres
-      # Improved startup script with health check
-      entrypoint: ["/bin/sh", "-c", "echo 'Waiting for postgres...' && sleep 30 && until PGPASSWORD=postgres psql -h postgres -U postgres -d postgres -c '\\q'; do echo 'Postgres unavailable - waiting...'; sleep 5; done && echo 'PostgreSQL is up - starting application' && node /app/dist/main.js"]
-      deploy:
-        replicas: 1
-        placement:
-          preferences:
-            - spread: node.role
-        resources:
-          limits:
-            cpus: '0.40'
-            memory: 384M
-          reservations:
-            cpus: '0.20'
-            memory: 192M
-        restart_policy:
-          condition: any
-          delay: 10s
-          max_attempts: 5
-        update_config:
-          parallelism: 1
-          delay: 10s
-          order: start-first
-          failure_action: rollback
-        labels:
-          - "traefik.enable=true"
-          - "traefik.http.routers.backend.rule=Host(`api.cpplanta.duckdns.org`)"
-          - "traefik.http.routers.backend.entrypoints=websecure"
-          - "traefik.http.routers.backend.tls.certresolver=myresolver"
-          - "traefik.http.services.backend.loadbalancer.server.port=3000"
-          - "traefik.http.middlewares.backend-cors.headers.accesscontrolallowmethods=GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS"
-          - "traefik.http.middlewares.backend-cors.headers.accesscontrolalloworiginlist=https://cpplanta.duckdns.org"
-          - "traefik.http.middlewares.backend-cors.headers.accesscontrolallowcredentials=true"
-          - "traefik.http.middlewares.backend-cors.headers.accesscontrolallowheaders=*"
-          - "traefik.http.routers.backend.middlewares=backend-cors"
+    image: norohim/cp-planta-backend:latest
+    environment:
+      - NODE_ENV=production
+      # Change to use pgbouncer instead of direct database connection
+      - DB_HOST=pgbouncer
+      - DB_PORT=6432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=postgres
+      - DATABASE_URL=postgresql://postgres:postgres@pgbouncer:6432/postgres
+      # Additional environment variables for Prisma
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    networks:
+      - backend_network
+      - traefik_network
+    depends_on:
+      - pgbouncer
+    deploy:
+      replicas: 1
+      placement:
+        preferences:
+          - spread: node.role
+      resources:
+        limits:
+          cpus: '0.40'
+          memory: 384M
+        reservations:
+          cpus: '0.20'
+          memory: 192M
+      restart_policy:
+        condition: any
+        delay: 10s
+        max_attempts: 5
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.backend.rule=Host(`api.cpplanta.duckdns.org`)"
+        - "traefik.http.routers.backend.entrypoints=websecure"
+        - "traefik.http.routers.backend.tls.certresolver=myresolver"
+        - "traefik.http.services.backend.loadbalancer.server.port=3000"
+    entrypoint: ["/bin/sh", "-c", "sleep 30 && node /app/dist/main.js"] # Wait for database to initialize
+    ports:
+      - "3000:3000"
         
   pgadmin:
-    image: dpage/pgadmin4:latest
+    image: norohim/pgadmin:latest
     environment:
       - PGADMIN_DEFAULT_EMAIL=sacilotto.andre@gmail.com
       - PGADMIN_DEFAULT_PASSWORD=SecurePassword123
       - PGADMIN_LISTEN_PORT=5050
     depends_on:
-      - postgres
+      - pgbouncer
+      - postgres_primary
+      - postgres_replica
     networks:
       - backend_network
       - traefik_network
@@ -179,15 +256,12 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      # Explicit API URL configuration
-      - NEXT_PUBLIC_API_URL=https://api.cpplanta.duckdns.org
+      - API_URL=https://api.cpplanta.duckdns.org
     networks:
       - frontend_network
       - traefik_network
     depends_on:
       - backend
-    # Add an entrypoint command to wait for backend
-    entrypoint: ["/bin/sh", "-c", "echo 'Waiting for backend to be available...' && until curl -s -f -o /dev/null https://api.cpplanta.duckdns.org/api || curl -s -f -o /dev/null http://backend:3000/api; do echo 'Backend unavailable - waiting...'; sleep 10; done && echo 'Backend is up - starting frontend' && exec node server.js"]
     deploy:
       replicas: 1
       placement:
@@ -202,13 +276,10 @@ services:
           memory: 128M
       restart_policy:
         condition: any
-        delay: 10s
-        max_attempts: 5
       update_config:
         parallelism: 1
         delay: 10s
         order: start-first
-        failure_action: rollback
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.frontend.rule=Host(`cpplanta.duckdns.org`)"
@@ -299,9 +370,11 @@ networks:
     driver: overlay
 
 volumes:
-  postgres_data:
+  postgres_primary_data:
+    driver: local
+  postgres_replica_data:
     driver: local
   pgadmin_data:
     driver: local
   traefik_data:
-    driver: local
+    driver: local   

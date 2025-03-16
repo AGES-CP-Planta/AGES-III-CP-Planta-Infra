@@ -121,7 +121,7 @@ AWS_ACCESS_KEY_ID=your_aws_access_key_id
 AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
 
 # Azure Provider Credentials
-AZURE_SUBSCRIPTION_ID=your_azure_subscription_id
+AZURE_SUBSCRIPTION_ID=your_azure_subscription_id # must have access to the Azure
 AZURE_TENANT_ID=your_azure_tenant_id
 AZURE_CLIENT_ID=your_azure_client_id
 AZURE_CLIENT_SECRET=your_azure_client_secret

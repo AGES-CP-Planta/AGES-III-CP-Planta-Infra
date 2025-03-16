@@ -1,0 +1,51 @@
+FROM postgres:15.4-alpine
+
+ENV POSTGRES_PRIMARY_HOST=postgres_primary
+ENV POSTGRES_PRIMARY_PORT=5432
+
+# Set up environment variables
+ENV POSTGRES_USER=postgres
+ENV POSTGRES_PASSWORD=postgres
+ENV POSTGRES_DB=postgres
+
+# Install required tools
+RUN apk update && apk add --no-cache \
+    repmgr \
+    pgbouncer \
+    sudo \
+    bash \
+    curl \
+    openssl \
+    ca-certificates \
+    gettext \
+    postgresql-client
+
+# Create necessary directories
+RUN mkdir -p /var/lib/postgresql/archive \
+    && mkdir -p /var/log/postgresql \
+    && chown -R postgres:postgres /var/lib/postgresql /var/log/postgresql
+
+# Copy the custom entrypoint script and configuration files
+COPY ./docker_entrypoint.sh /usr/local/bin/
+COPY ./postgresql.conf /etc/postgresql/
+COPY ./pg_hba.conf /etc/postgresql/
+
+# Copy SQL scripts for initialization (only used on the primary)
+COPY ./db_create.sql /docker-entrypoint-initdb.d/
+COPY ./db_insert.sql /docker-entrypoint-initdb.d/
+
+# Copy pgbouncer configuration
+COPY ./userlist.txt /etc/pgbouncer/userlist.txt
+COPY ./pgbouncer.ini /etc/pgbouncer/pgbouncer.ini
+
+# Ensure the entrypoint script is executable
+RUN chmod +x /usr/local/bin/docker_entrypoint.sh
+
+# Expose PostgreSQL and replication ports
+EXPOSE 5432 5433
+
+# Use the custom entrypoint script
+ENTRYPOINT ["docker_entrypoint.sh"]
+
+# Start PostgreSQL
+CMD ["postgres"]
