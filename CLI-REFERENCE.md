@@ -262,10 +262,10 @@ ansible -i static_ip.ini all -m ping
 ansible -i static_ip.ini all -m shell -a "systemctl status docker"
 
 # Run only specific tasks from playbook
-ansible-playbook -i static_ip.ini Swarm/swarm_setup.yml --tags "docker"
+ansible-playbook -i static_ip.ini deployment/ansible/playbooks/swarm_setup.yml --tags "docker"
 
 # Run playbook with verbose output
-ansible-playbook -i static_ip.ini Swarm/swarm_setup.yml -vvv
+ansible-playbook -i static_ip.ini deployment/ansible/playbooks/swarm_setup.yml -vvv
 ```
 
 ### AWS CLI Commands

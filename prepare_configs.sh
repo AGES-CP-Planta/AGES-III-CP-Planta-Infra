@@ -40,9 +40,9 @@ process_postgresql_config() {
     mkdir -p "$target_dir"
     
     # Copy base configuration
-    cp ./config/database/postgresql/postgresql.conf "$target_dir/"
-    cp ./config/database/postgresql/pg_hba.conf "$target_dir/"
-    cp ./config/database/postgresql/repmgr.conf "$target_dir/"
+    cp ./deployment/ansible/roles/database/postgresql/postgresql.conf "$target_dir/"
+    cp ./deployment/ansible/roles/database/postgresql/pg_hba.conf "$target_dir/"
+    cp ./deployment/ansible/roles/database/postgresql/repmgr.conf "$target_dir/"
     
     # Apply environment-specific modifications if any
     if [ -f "./config/environments/${ENV}/postgresql.conf.patch" ]; then
@@ -57,8 +57,8 @@ process_pgbouncer_config() {
     mkdir -p "$target_dir"
     
     # Copy base configuration
-    cp ./config/database/pgbouncer/pgbouncer.ini "$target_dir/"
-    cp ./config/database/pgbouncer/userlist.txt "$target_dir/"
+    cp ./deployment/ansible/roles/database/pgbouncer/pgbouncer.ini "$target_dir/"
+    cp ./deployment/ansible/roles/database/pgbouncer/userlist.txt "$target_dir/"
     
     # Apply environment-specific modifications if any
     if [ -f "./config/environments/${ENV}/pgbouncer.ini.patch" ]; then

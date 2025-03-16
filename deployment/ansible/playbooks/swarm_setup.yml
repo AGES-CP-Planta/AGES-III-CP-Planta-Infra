@@ -125,7 +125,7 @@
   # Copy configuration files 
   - name: Copy stack.yml to manager
     copy:
-      src: ./stack.yml
+      src: ../../swarm/stack.yml
       dest: /home/{{ ansible_ssh_user }}/stack.yml
     delegate_to: "{{ manager_node }}"
     run_once: true 
@@ -140,14 +140,14 @@
 
   - name: Copy Corefile to manager
     copy:
-      src: ./Corefile
+      src: ../roles/networking/Corefile
       dest: /home/{{ ansible_ssh_user }}/dns/Corefile
     delegate_to: "{{ manager_node }}"
     run_once: true
 
   - name: Copy zone file to manager
     copy:
-      src: ./cpplanta.duckdns.org.db
+      src: ../roles/networking/zones/cpplanta.duckdns.org.db
       dest: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
     delegate_to: "{{ manager_node }}"
     run_once: true
