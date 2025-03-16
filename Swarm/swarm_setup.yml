@@ -1,4 +1,4 @@
-- name: Configure the Docker Swarm Cluster with Optimized Workload Distribution
+- name: Configure the Docker Swarm Cluster
   hosts: all
   become: yes
   vars:
@@ -86,93 +86,43 @@
       state: started
       enabled: true
 
-  # Configure Docker daemon with proper resource settings
-  - name: Create Docker daemon.json directory
-    file:
-      path: /etc/docker
-      state: directory
-      mode: '0755'
-
-  - name: Configure Docker daemon
-    copy:
-      content: |
-        {
-          "log-driver": "json-file",
-          "log-opts": {
-            "max-size": "10m",
-            "max-file": "3"
-          },
-          "default-address-pools": [
-            {
-              "base": "172.80.0.0/16",
-              "size": 24
-            }
-          ],
-          "metrics-addr": "0.0.0.0:9323",
-          "experimental": true
-        }
-      dest: /etc/docker/daemon.json
-    register: docker_config
-
-  - name: Restart Docker service if config changed
-    systemd:
-      name: docker
-      state: restarted
-    when: docker_config.changed
-
-  # Store the manager's IP address for later use
-  - name: Set manager IP fact on manager node
-    set_fact:
-      manager_ip: "{{ ansible_default_ipv4.address }}"
-    when: inventory_hostname == manager_node
-
-  # Check if node is already part of a swarm
-  - name: Check if swarm is already initialized
-    shell: docker info | grep "Swarm" | awk '{print $2}'
-    register: swarm_status
-    ignore_errors: yes
-    changed_when: false
-
-  # Initialize swarm on manager node if not already in a swarm
+  # Initialize swarm on manager
   - name: Initialize Swarm on manager node
-    docker_swarm:
-      state: present
-      advertise_addr: "{{ ansible_default_ipv4.address }}"
-    when: inventory_hostname == manager_node and swarm_status.stdout != "active"
-    register: swarm_init
-
-  # Distribute manager IP to all hosts
-  - name: Get manager IP
-    set_fact:
-      manager_ip: "{{ hostvars[manager_node]['manager_ip'] }}"
-
-  # Get swarm join tokens from manager node
-  - name: Get swarm join tokens
-    docker_swarm_info:
+    shell: docker swarm init --advertise-addr {{ inventory_hostname }}
     when: inventory_hostname == manager_node
-    register: swarm_info
+    register: swarm_init
+    ignore_errors: yes
 
-  # Make the join token available to worker nodes
-  - name: Set worker token fact
+  # Debug the init output
+  - name: Debug swarm init
+    debug:
+      var: swarm_init
+    when: inventory_hostname == manager_node
+
+  # Get the worker token separately
+  - name: Get swarm worker token
+    shell: docker swarm join-token -q worker
+    register: token_output
+    when: inventory_hostname == manager_node
+
+  # Debug the token output
+  - name: Debug token output
+    debug:
+      var: token_output
+    when: inventory_hostname == manager_node
+
+  # Set token as a fact on manager
+  - name: Set token fact on manager
     set_fact:
-      worker_token: "{{ hostvars[manager_node]['swarm_info']['swarm_facts']['JoinTokens']['Worker'] }}"
-    when: 
-      - inventory_hostname != manager_node
-      - hostvars[manager_node]['swarm_info'] is defined
-      - hostvars[manager_node]['swarm_info']['swarm_facts'] is defined
+      worker_token: "{{ token_output.stdout }}"
+    when: inventory_hostname == manager_node
 
-  # Join worker nodes to the swarm
-  - name: Join worker nodes to the swarm
-    docker_swarm:
-      state: present
-      join_token: "{{ worker_token }}"
-      remote_addrs: [ "{{ manager_ip }}" ]
-    when: 
-      - inventory_hostname != manager_node
-      - worker_token is defined
-      - swarm_status.stdout != "active"
+  # Join workers to swarm using the token
+  - name: Join workers to swarm
+    shell: "docker swarm join --token {{ hostvars[groups['instance1'][0]].worker_token }} {{ groups['instance1'][0] }}:2377"
+    when: inventory_hostname != manager_node
 
-  # Copy DNS and stack configuration files 
+  # Copy configuration files 
   - name: Copy stack.yml to manager
     copy:
       src: ./stack.yml
@@ -180,7 +130,6 @@
     delegate_to: "{{ manager_node }}"
     run_once: true 
     
-  # Copy DNS configuration files
   - name: Create DNS directory structure on manager
     file:
       path: /home/{{ ansible_ssh_user }}/dns/zones
@@ -207,67 +156,9 @@
     replace:
       path: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
       regexp: '10\.0\.1\.10'
-      replace: "{{ manager_ip }}"
+      replace: "{{ manager_node }}"  # Using manager_node directly as the IP
     delegate_to: "{{ manager_node }}"
     run_once: true
-
-  # Check if node is initialized as swarm manager before proceeding
-  - name: Check if manager is initialized
-    shell: docker node ls
-    register: swarm_nodes_check
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-    ignore_errors: yes
-
-  # Get Docker node IDs after ensuring swarm is initialized
-  - name: Get Docker node IDs and details
-    shell: docker node ls --format '{% raw %}{{.ID}}\t{{.Hostname}}\t{{.Status}}\t{{.Availability}}\t{{.ManagerStatus}}{% endraw %}'
-    register: node_details
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-    ignore_errors: yes
-    when: swarm_nodes_check is success
-
-  - name: Debug node details
-    debug:
-      var: node_details
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-    ignore_errors: yes
-    when: node_details is defined
-
-  - name: Parse node details
-    set_fact:
-      swarm_nodes: "{{ node_details.stdout_lines | map('split', '\t') | list }}"
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-    ignore_errors: yes
-    when: node_details is defined and node_details.stdout_lines is defined
-
-  - name: Identify manager node
-    set_fact:
-      manager_node_id: "{{ swarm_nodes | selectattr('4', 'search', 'Leader|Reachable') | map('first') | first }}"
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-    ignore_errors: yes
-    when: swarm_nodes is defined
-
-  - name: Identify worker nodes
-    set_fact:
-      worker_node_ids: "{{ swarm_nodes | rejectattr('4', 'search', 'Leader|Reachable') | map('first') | list }}"
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-    ignore_errors: yes
-    when: swarm_nodes is defined
-
-  - name: Debug manager and worker node IDs
-    debug:
-      msg:
-        - "Manager node ID: {{ manager_node_id | default('Not identified yet') }}"
-        - "Worker node IDs: {{ worker_node_ids | default('Not identified yet') }}"
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-    ignore_errors: yes
 
   # Deploy the stack with better resource allocation
   - name: Deploy the stack on manager (with force update)
@@ -287,20 +178,26 @@
       state: present
     become: yes
 
-  - name: Install ctop (container monitoring tool)
-    shell: |
-      wget -qO- https://azlux.fr/repo.gpg.key | sudo apt-key add -
-      echo "deb http://packages.azlux.fr/debian/ bullseye main" | sudo tee /etc/apt/sources.list.d/azlux.list
-      sudo apt update
-      sudo apt install -y ctop
-    args:
-      creates: /usr/bin/ctop
+  - name: Add Azure repository key
+    apt_key:
+      url: https://azlux.fr/repo.gpg.key
+      state: present
+
+  - name: Add Azure repository
+    apt_repository:
+      repo: deb http://packages.azlux.fr/debian/ bullseye main
+      state: present
+
+  - name: Install ctop
+    apt:
+      name: ctop
+      state: present
+      update_cache: yes
     become: yes
-    ignore_errors: yes
 
   - name: Wait for 25 seconds to show proper service status
     wait_for:
-      timeout: 25
+      timeout: 30
 
   - name: Show service status
     command: docker service ls
@@ -313,15 +210,3 @@
     debug:
       var: service_status.stdout_lines
     when: service_status is defined
-
-  - name: Show node resource utilization
-    command: docker node ls
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-    register: node_status
-    ignore_errors: yes
-  
-  - name: Display node status
-    debug:
-      var: node_status.stdout_lines
-    when: node_status is defined
