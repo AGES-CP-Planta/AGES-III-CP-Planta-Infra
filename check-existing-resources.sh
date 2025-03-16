@@ -50,9 +50,9 @@ done
 
 # Set terraform directory based on provider
 if [[ "$PROVIDER" == "aws" ]]; then
-    TERRAFORM_DIR="TerraformAWS"
+    TERRAFORM_DIR="./terraform/aws/"
 elif [[ "$PROVIDER" == "azure" ]]; then
-    TERRAFORM_DIR="TerraformAzure"
+    TERRAFORM_DIR="./terraform/azure/"
 fi
 
 # Check if directory exists

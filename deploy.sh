@@ -129,10 +129,10 @@ fi
 INVENTORY_FILE="static_ip.ini"
 
 echo -e "${YELLOW}Updating Docker Swarm services...${NC}"
-cd Swarm
+cd deployment/ansible
 
 # Update existing stack
-ansible-playbook -i ../$INVENTORY_FILE ./swarm_setup.yml 
+ansible-playbook -i ../../../$INVENTORY_FILE ./playbooks/swarm_setup.yml 
 
 cd ..
 echo -e "${GREEN}Update completed successfully!${NC}"
@@ -218,7 +218,7 @@ if [[ "$SKIP_TERRAFORM" == "false" ]]; then
     echo -e "${YELLOW}Running Terraform for $PROVIDER...${NC}"
 
     if [[ "$PROVIDER" == "aws" ]]; then
-        cd TerraformAWS
+        cd terraform/aws
         terraform init
         
         # Check if terraform plan works before applying
@@ -238,7 +238,7 @@ if [[ "$SKIP_TERRAFORM" == "false" ]]; then
             exit 1
         fi
     elif [[ "$PROVIDER" == "azure" ]]; then
-        cd TerraformAzure
+        cd terraform/azure
         terraform init
         
         # Check if terraform plan works before applying
@@ -275,18 +275,18 @@ chmod 400 ssh_keys/*.pem
 
 # Deploy the stack on Docker Swarm
 echo -e "${YELLOW}Deploying Docker Swarm stack...${NC}"
-cd Swarm
+cd deployment/ansible
 
 echo -e "${YELLOW}Using single-region configuration...${NC}"
-ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i ../static_ip.ini ./swarm_setup.yml 
+ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i ../../../static_ip.ini ./playbooks/swarm_setup.yml 
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}Error: Swarm setup playbook encountered errors.${NC}"
     echo -e "${YELLOW}Checking Docker Swarm status on manager node...${NC}"
     
     # Extract manager IP and key from inventory
-    manager_ip=$(grep -A1 '\[instance1\]' ../static_ip.ini | tail -n1 | awk '{print $1}')
-    manager_key=$(grep -A1 '\[instance1\]' ../static_ip.ini | tail -n1 | grep -o 'ansible_ssh_private_key_file=[^ ]*' | cut -d= -f2)
+    manager_ip=$(grep -A1 '\[instance1\]' ../../../static_ip.ini | tail -n1 | awk '{print $1}')
+    manager_key=$(grep -A1 '\[instance1\]' ../../../static_ip.ini | tail -n1 | grep -o 'ansible_ssh_private_key_file=[^ ]*' | cut -d= -f2)
     
     # Check if Docker Swarm is running on manager
     ssh -i $manager_key ubuntu@$manager_ip "docker node ls" 2>/dev/null
@@ -310,10 +310,10 @@ echo -e "${YELLOW}You should now be able to access your services at the provided
 # Display node IPs for user reference
 if [[ "$PROVIDER" == "aws" ]]; then
     echo -e "${BLUE}AWS Instance IPs:${NC}"
-    jq -r '.resources[] | select(.type == "aws_instance") | .instances[] | .attributes.public_ip' TerraformAWS/terraform.tfstate
+    jq -r '.resources[] | select(.type == "aws_instance") | .instances[] | .attributes.public_ip' terraform/aws/terraform.tfstate
 elif [[ "$PROVIDER" == "azure" ]]; then
     echo -e "${BLUE}Azure VM IPs:${NC}"
-    jq -r '.resources[] | select(.type == "azurerm_virtual_machine") | .instances[] | .attributes.public_ip_address' TerraformAzure/terraform.tfstate
+    jq -r '.resources[] | select(.type == "azurerm_virtual_machine") | .instances[] | .attributes.public_ip_address' terraform/azure/terraform.tfstate
 fi
 
 echo -e "${YELLOW}Updating DNS records...${NC}"

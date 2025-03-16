@@ -87,46 +87,57 @@ Before deploying, ensure you have the following:
 The repository is organized as follows:
 
 ```plaintext
-CP-Planta-Infra/
-├── .github/workflows/               # GitHub Actions workflows
-│   ├── auto-update.yml              # Automatic updates on code changes
-│   └── full_deployment.yml          # Full infrastructure deployment
-├── ssh_keys/                        # Generated SSH keys (gitignored)
-├── Swarm/                           # Docker Swarm configuration
-│   ├── ansible.cfg                  # Ansible configuration
-│   ├── stack.yml                    # Docker Swarm stack definition
-│   ├── dns/                         # DNS configuration files
-│   └── swarm_setup.yml              # Ansible playbook for setting up Swarm
-├── TerraformAWS/                    # AWS infrastructure
-│   ├── instance.tf                  # AWS EC2 instance configuration
-│   ├── inventory.tf                 # Generates Ansible inventory
-│   ├── main.tf                      # Main Terraform configuration
-│   ├── network.tf                   # AWS VPC and network configuration
-│   ├── outputs.tf                   # Terraform outputs
-│   ├── providers.tf                 # AWS provider configuration
-│   └── variables.tf                 # Variables for deployment
-├── TerraformAzure/                  # Azure infrastructure
-│   ├── inventory.tf                 # Generates Ansible inventory
-│   ├── main.tf                      # Main Terraform configuration
-│   ├── network.tf                   # Azure VNET configuration
-│   ├── outputs.tf                   # Terraform outputs
-│   ├── providers.tf                 # Azure provider configuration
-│   ├── resource_group.tf            # Azure resource group
-│   ├── variables.tf                 # Variables for deployment
-│   └── vm.tf                        # Azure VM configuration
-├── .env                             # Environment variables (gitignored)
-├── .env.example                     # Example environment variables
-├── .gitignore                       # Git ignore file
-├── deploy.sh                        # Main deployment script
-├── update-deployment.sh             # Update existing deployment
-├── destroy.sh                       # Infrastructure teardown
-├── check-existing-resources.sh      # Check for pre-existing cloud resources
-├── save-terraform-state.sh          # Save/load Terraform state
-├── secrets-manager.sh               # Manage environment variables securely
-├── README.md                        # Project overview
-├── DEPLOYMENT.md                    # This detailed deployment guide
-├── CLI-REFERENCE.md                 # Command-line reference
-└── static_ip.ini                    # Inventory file (generated)
+.
+├── .github/
+│   └── workflows/
+├── config/
+├── deployment/
+│   ├── ansible/
+│   │   ├── playbooks/
+│   │   │   ├── ansible.cfg
+│   │   │   ├── swarm_setup.yml
+│   │   │   └── update-swarm-setup.sh
+│   │   └── roles/
+│   │       ├── database/
+│   │       │   ├── pgbouncer/
+│   │       │   │   ├── dockerfile.pgbouncer
+│   │       │   │   ├── pgbouncer.ini
+│   │       │   │   └── userlist.txt
+│   │       │   └── postgresql/
+│   │       │       ├── dockerfile.postgres
+│   │       │       ├── pg_hba.conf
+│   │       │       ├── postgres-entrypoint.sh
+│   │       │       ├── postgresql.conf
+│   │       │       └── repmgr.conf
+│   │       └── networking/
+│   │           ├── dns/
+│   │           │   └── Corefile
+│   │           └── zones/
+│   │               └── cpplanta.duckdns.org.db
+│   ├── kubernetes/
+│   │   └── manifests/
+│   └── swarm/
+│       ├── replication_setup.sh
+│       └── stack.yml
+├── docs/
+│   ├── ENHANCEMENTS.md
+│   └── single-region-diagram.svg
+├── terraform/
+│   ├── aws/
+│   └── azure/
+├── .env.example
+├── CLI-REFERENCE.md
+├── DEPLOYMENT.md
+├── LICENSE
+├── README.md
+├── check-existing-resources.sh
+├── deploy.sh
+├── destroy.sh
+├── duckdns-updater.sh
+├── prepare_configs.sh
+├── save-terraform-state.sh
+├── secrets-manager.sh
+└── update-deployment.sh
 ```
 
 ## Deployment Options

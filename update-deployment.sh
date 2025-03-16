@@ -179,13 +179,13 @@ if [[ ! -f "$INVENTORY_FILE" ]]; then
 fi
 
 # Update Swarm services
-cd Swarm
+cd deployment/ansible
 
 # Determine the manager node
 MANAGER_GROUP="instance1"
 
 # Use Ansible to get the manager node IP
-MANAGER_IP=$(ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "hostname -I | awk '{print \$1}'" | grep -v "CHANGED" | tr -d '[:space:]')
+MANAGER_IP=$(ansible -i ../../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "hostname -I | awk '{print \$1}'" | grep -v "CHANGED" | tr -d '[:space:]')
 
 if [[ -z "$MANAGER_IP" ]]; then
     echo -e "${RED}Error: Could not determine manager node IP.${NC}"
@@ -196,42 +196,42 @@ echo -e "${YELLOW}Manager node IP: $MANAGER_IP${NC}"
 
 # Copy updated stack files if needed
 echo -e "${YELLOW}Copying updated stack file to manager node...${NC}"
-ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m copy -a "src=./stack.yml dest=/home/{{ ansible_ssh_user }}/stack.yml" --become
+ansible -i ../../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m copy -a "src=./playbooks/stack.yml dest=/home/{{ ansible_ssh_user }}/stack.yml" --become
 
 # Update DNS configuration files if needed
 echo -e "${YELLOW}Updating DNS configuration...${NC}"
-ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m file -a "path=/home/{{ ansible_ssh_user }}/dns/zones state=directory mode=0755" --become
-ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m copy -a "src=./Corefile dest=/home/{{ ansible_ssh_user }}/dns/Corefile" --become
-ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m copy -a "src=./cpplanta.duckdns.org.db dest=/home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db" --become
+ansible -i ../../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m file -a "path=/home/{{ ansible_ssh_user }}/dns/zones state=directory mode=0755" --become
+ansible -i ../../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m copy -a "src=../roles/networking/Corefile dest=/home/{{ ansible_ssh_user }}/dns/Corefile" --become
+ansible -i ../../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m copy -a "src=../roles/networking/zones/cpplanta.duckdns.org.db dest=/home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db" --become
 
 # Update DNS zone file with manager IP
-ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m replace -a "path=/home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db regexp='10\\.0\\.1\\.10' replace='{{ ansible_default_ipv4.address }}'" --become
+ansible -i ../../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m replace -a "path=/home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db regexp='10\\.0\\.1\\.10' replace='{{ ansible_default_ipv4.address }}'" --become
 
 # Redeploy the stack
 echo -e "${YELLOW}Redeploying stack on manager node...${NC}"
-ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "cd /home/{{ ansible_ssh_user }} && docker stack deploy --with-registry-auth --resolve-image always -c stack.yml CP-Planta" --become
+ansible -i ../../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "cd /home/{{ ansible_ssh_user }} && docker stack deploy --with-registry-auth --resolve-image always -c stack.yml CP-Planta" --become
 
 # Update specific services if needed
 STACK_PREFIX="CP-Planta"
 
 if [[ "$UPDATE_FRONTEND" == "true" ]]; then
     echo -e "${YELLOW}Updating frontend services...${NC}"
-    ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service update --force ${STACK_PREFIX}_frontend" --become
+    ansible -i ../../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service update --force ${STACK_PREFIX}_frontend" --become
 fi
 
 if [[ "$UPDATE_BACKEND" == "true" ]]; then
     echo -e "${YELLOW}Updating backend services...${NC}"
-    ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service update --force ${STACK_PREFIX}_backend" --become
+    ansible -i ../../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service update --force ${STACK_PREFIX}_backend" --become
 fi
 
 if [[ "$UPDATE_DB" == "true" ]]; then
     echo -e "${YELLOW}Updating database services...${NC}"
-    ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service update --force ${STACK_PREFIX}_postgres ${STACK_PREFIX}_pgadmin" --become
+    ansible -i ../../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service update --force ${STACK_PREFIX}_postgres ${STACK_PREFIX}_pgadmin" --become
 fi
 
 # Update DNS service if needed
 echo -e "${YELLOW}Updating DNS service...${NC}"
-ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service update --force ${STACK_PREFIX}_dns" --become
+ansible -i ../../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service update --force ${STACK_PREFIX}_dns" --become
 
 # Wait for services to stabilize
 echo -e "${YELLOW}Waiting for services to stabilize...${NC}"
@@ -239,7 +239,7 @@ sleep 15
 
 # Show service status
 echo -e "${YELLOW}Service status:${NC}"
-ansible -i ../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service ls" --become
+ansible -i ../../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service ls" --become
 
 # Update deployment marker
 git rev-parse HEAD > ../.last_deployment

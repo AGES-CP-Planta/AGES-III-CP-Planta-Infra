@@ -67,9 +67,9 @@ fi
 
 # Determine the Terraform directory based on provider
 if [[ "$PROVIDER" == "aws" ]]; then
-    TF_DIR="TerraformAWS"
+    TF_DIR="terraform/aws"
 elif [[ "$PROVIDER" == "azure" ]]; then
-    TF_DIR="TerraformAzure"
+    TF_DIR="terraform/azure"
 else
     echo -e "${RED}Error: Invalid provider specified. Use 'aws' or 'azure'.${NC}"
     exit 1

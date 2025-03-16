@@ -60,9 +60,18 @@ CP-Planta Infrastructure provides an automated deployment pipeline for a contain
 CP-Planta-Infra/
 ├── .github/workflows/     # GitHub Actions workflows
 ├── ssh_keys/              # Generated SSH keys (gitignored)
-├── Swarm/                 # Docker Swarm configuration
-├── TerraformAWS/          # AWS infrastructure configuration
-├── TerraformAzure/        # Azure infrastructure configuration
+├── deployment/            # Ansible playbooks and roles
+│   ├── ansible
+│      ├── playbooks/         # Ansible playbooks
+│      └── roles/             # Ansible configuration files
+│   ├── swarm/              # Docker Swarm configuration files
+├── ├── kubernetes/         # Kubernetes configuration files   
+├── docs/                  # Documentation files
+├── terraform/             # Terraform configuration files
+│   ├── aws/               # AWS-specific configuration
+│   └── azure/             # Azure-specific configuration
+├── deploy.sh              # Deployment script
+├── destroy.sh             # Destruction script 
 ├── *.sh                   # Deployment and utility scripts
 ├── *.md                   # Documentation
 ├── .env                   # Environment variables (gitignored)

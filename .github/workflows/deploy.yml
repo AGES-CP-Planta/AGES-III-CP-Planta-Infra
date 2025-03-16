@@ -1,0 +1,271 @@
+name: Deploy CP-Planta Infrastructure
+
+on:
+  # Commented out to disable automatic deployments on push
+  # push:
+  #   branches: [main]
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: 'Cloud provider'
+        required: true
+        default: 'aws'
+        type: choice
+        options:
+          - aws
+          - azure
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      deployment_type:
+        description: 'Deployment type'
+        required: true
+        default: 'swarm'
+        type: choice
+        options:
+          - swarm
+          - kubernetes
+      skip_terraform:
+        description: 'Skip Terraform provisioning'
+        required: false
+        default: false
+        type: boolean
+      service:
+        description: 'Service to update (only when infrastructure exists)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - frontend
+          - backend
+          - db
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      env_name: ${{ steps.set-env.outputs.env_name }}
+      deploy_type: ${{ steps.set-env.outputs.deploy_type }}
+      provider: ${{ steps.set-env.outputs.provider }}
+      skip_terraform: ${{ steps.set-env.outputs.skip_terraform }}
+      service: ${{ steps.set-env.outputs.service }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up environment variables
+        id: set-env
+        run: |
+          echo "env_name=${{ github.event.inputs.environment || 'production' }}" >> $GITHUB_OUTPUT
+          echo "deploy_type=${{ github.event.inputs.deployment_type || 'swarm' }}" >> $GITHUB_OUTPUT
+          echo "provider=${{ github.event.inputs.provider || 'aws' }}" >> $GITHUB_OUTPUT
+          echo "skip_terraform=${{ github.event.inputs.skip_terraform || 'false' }}" >> $GITHUB_OUTPUT
+          echo "service=${{ github.event.inputs.service || 'all' }}" >> $GITHUB_OUTPUT
+          
+          echo "ENV_NAME=${{ github.event.inputs.environment || 'production' }}" >> $GITHUB_ENV
+          echo "DEPLOY_TYPE=${{ github.event.inputs.deployment_type || 'swarm' }}" >> $GITHUB_ENV
+          echo "PROVIDER=${{ github.event.inputs.provider || 'aws' }}" >> $GITHUB_ENV
+          echo "SKIP_TERRAFORM=${{ github.event.inputs.skip_terraform || 'false' }}" >> $GITHUB_ENV
+          echo "SERVICE=${{ github.event.inputs.service || 'all' }}" >> $GITHUB_ENV
+        
+      - name: Decrypt secrets
+        env:
+          DECRYPT_PASSWORD: ${{ secrets.SECRETS_PASSWORD }}
+        run: |
+          if [ -f ".env.encrypted" ] && [ -n "$DECRYPT_PASSWORD" ]; then
+            chmod +x ./secrets-manager.sh
+            ./secrets-manager.sh decrypt -p "$DECRYPT_PASSWORD"
+          else
+            echo "No encrypted secrets found or no password provided"
+            cp .env.example .env
+          fi
+          
+      - name: Load environment-specific variables
+        run: |
+          if [ -f "./config/environments/${{ env.ENV_NAME }}.env" ]; then
+            cat "./config/environments/${{ env.ENV_NAME }}.env" >> $GITHUB_ENV
+          fi
+
+  check-existing:
+    needs: prepare
+    runs-on: ubuntu-latest
+    if: needs.prepare.outputs.skip_terraform == 'false'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Check for existing resources
+        run: |
+          chmod +x ./check-existing-resources.sh
+          ./check-existing-resources.sh --provider ${{ needs.prepare.outputs.provider }} --action check
+        
+      - name: Prepare for infrastructure update
+        if: ${{ success() && env.EXISTING_RESOURCES == 'true' }}
+        run: |
+          chmod +x ./check-existing-resources.sh
+          ./check-existing-resources.sh --provider ${{ needs.prepare.outputs.provider }} --action import
+
+  deploy-infrastructure:
+    needs: [prepare, check-existing]
+    if: needs.prepare.outputs.skip_terraform == 'false'
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.tf-apply.outputs.has_changes }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        
+      - name: Configure AWS credentials
+        if: needs.prepare.outputs.provider == 'aws'
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+          
+      - name: Configure Azure credentials
+        if: needs.prepare.outputs.provider == 'azure'
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          
+      - name: Deploy infrastructure with Terraform
+        id: tf-apply
+        run: |
+          TERRAFORM_DIR="Terraform${{ needs.prepare.outputs.provider == 'aws' && 'AWS' || 'Azure' }}"
+          cd $TERRAFORM_DIR
+          terraform init
+          terraform plan -out=tf.plan
+          
+          # Apply and check if changes were made
+          terraform apply -auto-approve tf.plan
+          if terraform plan -detailed-exitcode; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Wait for instances to initialize
+        if: steps.tf-apply.outputs.has_changes == 'true'
+        run: |
+          echo "Waiting for instances to initialize..."
+          sleep 40
+          
+      - name: Save Terraform state
+        run: |
+          chmod +x ./save-terraform-state.sh
+          ./save-terraform-state.sh --provider ${{ needs.prepare.outputs.provider }} --action save --storage github
+
+  update-deployment:
+    needs: [prepare, deploy-infrastructure]
+    if: always() && (needs.prepare.outputs.skip_terraform == 'true' || needs.deploy-infrastructure.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip
+          pip install ansible
+          
+      - name: Load Terraform state
+        run: |
+          chmod +x ./save-terraform-state.sh
+          ./save-terraform-state.sh --provider ${{ needs.prepare.outputs.provider }} --action load --storage github
+        
+      - name: Determine deployment action
+        id: deployment-action
+        run: |
+          if [ "${{ needs.prepare.outputs.skip_terraform }}" == "true" ]; then
+            echo "Using update-deployment.sh"
+            echo "action=update" >> $GITHUB_OUTPUT
+          else
+            echo "Using deploy.sh"
+            echo "action=deploy" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Deploy application stack
+        if: steps.deployment-action.outputs.action == 'deploy'
+        run: |
+          chmod +x ./deploy.sh
+          ./deploy.sh --provider ${{ needs.prepare.outputs.provider }} --skip-terraform --no-interactive
+        
+      - name: Update existing deployment
+        if: steps.deployment-action.outputs.action == 'update'
+        run: |
+          chmod +x ./update-deployment.sh
+          ./update-deployment.sh --provider ${{ needs.prepare.outputs.provider }} --service ${{ needs.prepare.outputs.service }}
+          
+      - name: Setup replication if enabled
+        if: env.ENABLE_REPLICATION == 'true'
+        run: |
+          # Check if script exists, if not create it
+          if [ ! -f "./deployment/swarm/replication_setup.sh" ]; then
+            # Copy template script from ansible playbooks
+            mkdir -p ./deployment/swarm/
+            cp ./deployment/ansible/playbooks/update-swarm-setup.sh ./deployment/swarm/replication_setup.sh
+            chmod +x ./deployment/swarm/replication_setup.sh
+          fi
+          
+          # Run replication setup
+          ./deployment/swarm/replication_setup.sh
+          
+          # Apply changes via ansible
+          ansible-playbook -i static_ip.ini ./swarm_postgres_replication.yml
+
+  verify-deployment:
+    needs: [prepare, update-deployment]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Update DNS records
+        run: |
+          if [ -f "./duckdns-updater.sh" ]; then
+            chmod +x ./duckdns-updater.sh
+            ./duckdns-updater.sh
+          else
+            echo "DuckDNS updater script not found, skipping DNS update"
+          fi
+        
+      - name: Verify endpoint access
+        run: |
+          # Wait for DNS propagation
+          echo "Waiting for DNS propagation..."
+          sleep 30
+          
+          # Check service access
+          for domain in cpplanta.duckdns.org api.cpplanta.duckdns.org pgadmin.cpplanta.duckdns.org viz.cpplanta.duckdns.org; do
+            echo "Checking $domain..."
+            if curl -s -o /dev/null -w "%{http_code}" https://$domain; then
+              echo "$domain - OK"
+            else
+              echo "$domain - FAILED"
+            fi
+          done
+
+  notify:
+    needs: [prepare, verify-deployment]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify deployment result
+        run: |
+          if [ "${{ needs.verify-deployment.result }}" == "success" ]; then
+            echo "Deployment completed successfully!"
+          else
+            echo "Deployment encountered issues. Check the logs for details."
+          fi

@@ -140,7 +140,7 @@
 
   - name: Copy Corefile to manager
     copy:
-      src: ../roles/networking/Corefile
+      src: ../roles/networking/dns/Corefile
       dest: /home/{{ ansible_ssh_user }}/dns/Corefile
     delegate_to: "{{ manager_node }}"
     run_once: true
