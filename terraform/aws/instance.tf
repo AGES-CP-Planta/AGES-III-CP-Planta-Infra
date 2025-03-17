@@ -1,10 +1,23 @@
+module "ssh_keys" {
+  source         = "../modules/common/ssh-keys"
+  instance_names = var.instance_names
+  keys_path      = "${path.module}/../../ssh_keys"
+}
+
+# Create AWS key pairs from the module output
+resource "aws_key_pair" "generated_key" {
+  for_each   = toset(var.instance_names)
+  key_name   = "${each.key}-key"
+  public_key = module.ssh_keys.public_keys[each.key]
+}
+
 data "aws_ami" "ubuntu" {
   most_recent = true
   owners      = ["099720109477"] # Canonical
 
   filter {
     name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+    values = ["ubuntu/images/hvm-ssd/ubuntu-noble-24.04-amd64-server-*"]
   }
 
   filter {
