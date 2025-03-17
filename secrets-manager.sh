@@ -131,6 +131,7 @@ DOMAIN_NAME=cp-planta.yourdomain.com
 ACME_EMAIL=your_email@example.com
 PGADMIN_EMAIL=your_email@example.com
 PGADMIN_PASSWORD=SecurePassword123
+NEXT_PUBLIC_API_URL=https://api.cpplanta.duckdns.org
 
 # DuckDNS Configuration
 DUCKDNS_TOKEN=your_duckdns_token

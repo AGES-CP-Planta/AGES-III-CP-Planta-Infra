@@ -255,6 +255,7 @@ services:
     image: norohim/cp-planta-frontend:latest
     environment:
       - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://api.cpplanta.duckdns.org
       - PORT=3001
       - API_URL=https://api.cpplanta.duckdns.org
     networks:
