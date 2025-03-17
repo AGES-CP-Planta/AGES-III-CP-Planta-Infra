@@ -4,6 +4,6 @@ output "vm_public_ips" {
 }
 
 output "vm_ssh_private_keys" {
-  value = { for k, v in tls_private_key.vm_ssh_key : k => v.private_key_pem }
+  value     = module.ssh_keys.private_keys
   sensitive = true
 }

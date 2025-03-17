@@ -3,6 +3,7 @@ variable "resource_group_name" {
 }
 
 variable "location" {
+  description = "Azure region where resources will be created"
   default = "East US 2"
 }
 
@@ -15,12 +16,15 @@ variable "address_space" {
 }
 
 variable "subnet_name" {
+  description = "Name of the subnet"
   type    = string
   default = "cp-planta-subnet"
 }
 
 variable "subnet_prefixes" {
-  default = ["10.0.1.0/24"]
+  description = "Address prefixes for the subnet"
+  type        = list(string)
+  default     = ["10.0.1.0/24"]
 }
 
 variable "public_key_path" {
@@ -39,19 +43,3 @@ variable "azure_subscription_id" {
   description = "Azure Subscription ID"
   type        = string
 }
-
-# variable "azure_tenant_id" {
-#   description = "Azure Tenant ID"
-#   type        = string
-# }
-
-# variable "azure_client_id" {
-#   description = "Azure Client ID (Service Principal)"
-#   type        = string
-# }
-
-# variable "azure_client_secret" {
-#   description = "Azure Client Secret (Service Principal)"
-#   type        = string
-#   sensitive   = true
-# }

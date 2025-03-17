@@ -3,6 +3,58 @@ module "security_rules" {
   environment_name = var.resource_group_name
 }
 
+# Create a virtual network
+resource "azurerm_virtual_network" "vnet" {
+  name                = var.vnet_name
+  address_space       = var.address_space
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+}
+
+# Create a subnet
+resource "azurerm_subnet" "subnet" {
+  name                 = var.subnet_name
+  resource_group_name  = azurerm_resource_group.rg.name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = var.subnet_prefixes
+}
+
+resource "azurerm_public_ip" "public_ip" {
+  for_each            = toset(var.vm_names)
+  name                = "cp-planta-public-ip-${each.key}"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+  
+  tags = {
+    Name = "${var.resource_group_name}-public-ip-${each.key}"
+  }
+}
+resource "azurerm_network_interface" "nic" {
+  for_each            = toset(var.vm_names)
+  name                = "cp-planta-nic-${each.key}"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = azurerm_subnet.subnet.id
+    private_ip_address_allocation = "Dynamic"
+    public_ip_address_id          = azurerm_public_ip.public_ip[each.key].id
+  }
+  
+  tags = {
+    Name = "${var.resource_group_name}-nic-${each.key}"
+  }
+}
+# Associate NSG with NICs
+resource "azurerm_network_interface_security_group_association" "nsg_association" {
+  for_each                  = azurerm_network_interface.nic
+  network_interface_id      = each.value.id
+  network_security_group_id = azurerm_network_security_group.nsg.id
+}
+
 resource "azurerm_network_security_group" "nsg" {
   name                = "${module.security_rules.environment_name}-nsg"
   location            = azurerm_resource_group.rg.location
