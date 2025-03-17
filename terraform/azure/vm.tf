@@ -1,3 +1,9 @@
+module "ssh_keys" {
+  source         = "../modules/common/ssh-keys"
+  instance_names = var.vm_names
+  keys_path      = "${path.module}/../../ssh_keys"
+}
+
 resource "azurerm_linux_virtual_machine" "vm" {
   for_each            = toset(var.vm_names)
   name                = each.key
@@ -12,13 +18,13 @@ resource "azurerm_linux_virtual_machine" "vm" {
   
   admin_ssh_key {
     username   = var.username
-    public_key = tls_private_key.vm_ssh_key[each.key].public_key_openssh
+    public_key = module.ssh_keys.public_keys[each.key]
   }
  
   source_image_reference {
     publisher = "Canonical"
-    offer     = "0001-com-ubuntu-server-jammy"
-    sku       = "22_04-lts-gen2"
+    offer     = "0001-com-ubuntu-server-noble"
+    sku       = "24_04-lts-gen2"
     version   = "latest"
   }
   
