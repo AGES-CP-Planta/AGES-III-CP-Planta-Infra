@@ -127,8 +127,8 @@ Comprehensive scripts for deployment, updates, and maintenance tasks reduce oper
 
 ## Documentation
 
-- [DEPLOYMENT.md](./DEPLOYMENT.md) - Detailed deployment instructions
-- [CLI-REFERENCE.md](./CLI-REFERENCE.md) - Command-line reference guide
+- [DEPLOYMENT.md](./docs/DEPLOYMENT.md) - Detailed deployment instructions
+- [CLI-REFERENCE.md](./docs/CLI-REFERENCE.md) - Command-line reference guide
 
 ## Contributing
 
