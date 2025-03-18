@@ -2,19 +2,28 @@
 
 Cloud-agnostic Infrastructure as Code (IaC) and Configuration as Code (CaC) for the CP-Planta application, supporting AWS and Azure platforms with Docker Swarm orchestration.
 
+![Banner](https://via.placeholder.com/800x200?text=CP-Planta+Infrastructure)
+
 ## Overview
 
 CP-Planta Infrastructure provides an automated deployment pipeline for a containerized application stack with:
 
 - **Multi-cloud support**: Deploy to AWS or Azure with the same code base
 - **High availability**: Docker Swarm orchestration with service replication
-- **Database resilience**: PostgreSQL with primary setup
+- **Database resilience**: PostgreSQL with primary-replica replication
+- **Connection pooling**: PgBouncer for optimized database connections
 - **Automated DevOps**: GitHub Actions workflows for CI/CD
 - **Secure access**: Automatic SSL certificate generation via Let's Encrypt
 
-## Architecture Diagram
+## Architecture
 
-![Infrastructure Diagram](./docs/images/single-region-diagram.svg)
+The infrastructure is designed as a multi-tier application with:
+
+- **Frontend**: React.js application served through Traefik
+- **Backend**: NestJS API with Prisma ORM
+- **Database**: PostgreSQL with replication for high availability
+- **Edge Router**: Traefik for SSL termination and routing
+- **Monitoring**: Docker Swarm Visualizer
 
 ## Quick Start
 
@@ -30,7 +39,7 @@ CP-Planta Infrastructure provides an automated deployment pipeline for a contain
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/Saccilotto/AGES-III-CP-Planta-Infra.git
+   git clone https://github.com/Saccilotto-AGES-Projects/AGES-III-CP-Planta-Infra.git
    cd AGES-III-CP-Planta-Infra
    ```
 
@@ -52,55 +61,81 @@ CP-Planta Infrastructure provides an automated deployment pipeline for a contain
    ./deploy.sh --provider azure
    ```
 
-4. Access your application via the displayed endpoints.
+4. Access your application via the displayed endpoints:
+   - Frontend: https://cpplanta.duckdns.org
+   - API: https://api.cpplanta.duckdns.org
+   - PgAdmin: https://pgadmin.cpplanta.duckdns.org
+   - Visualizer: https://viz.cpplanta.duckdns.org
 
 ## Project Structure
 
-```plaintext
+```
 CP-Planta-Infra/
 ├── .github/workflows/     # GitHub Actions workflows
-├── ssh_keys/              # Generated SSH keys (gitignored)
-├── deployment/            # Ansible playbooks and roles
-│   ├── ansible
-│      ├── playbooks/         # Ansible playbooks
-│      └── roles/             # Ansible configuration files
-│   ├── swarm/              # Docker Swarm configuration files
-├── ├── kubernetes/         # Kubernetes configuration files   
-├── docs/                  # Documentation files
-├── terraform/             # Terraform configuration files
+├── terraform/             # Infrastructure as Code
 │   ├── aws/               # AWS-specific configuration
-│   └── azure/             # Azure-specific configuration
-├── deploy.sh              # Deployment script
-├── destroy.sh             # Destruction script 
-├── *.sh                   # Deployment and utility scripts
-├── *.md                   # Documentation
-├── .env                   # Environment variables (gitignored)
-└── *.example              # Variable files' templates
+│   ├── azure/             # Azure-specific configuration
+│   └── modules/           # Reusable Terraform modules
+├── deployment/            # Configuration as Code
+│   ├── ansible/           # Ansible playbooks and roles
+│   ├── swarm/             # Docker Swarm configuration
+│   └── kubernetes/        # Kubernetes configuration (future)
+├── docs/                  # Documentation
+├── *.sh                   # Main deployment scripts
+└── *.md                   # Documentation files
 ```
 
 ## Core Components
 
-- **Infrastructure**: AWS EC2 or Azure VMs with appropriate networking
-- **Orchestration**: Docker Swarm for container management
-- **Database**: PostgreSQL database
-- **Frontend**: React-based UI
-- **Backend**: Node.js API
+### Infrastructure Layer
+
+- **Compute**: AWS EC2 or Azure VM instances
+- **Networking**: VPC/VNet, Security Groups, Load Balancers
+- **DNS**: DuckDNS for domain management
+
+### Platform Layer
+
+- **Container Orchestration**: Docker Swarm
 - **Reverse Proxy**: Traefik with automatic SSL
-- **Monitoring**: Container visualizer and monitoring tools
+- **Service Discovery**: Internal DNS with CoreDNS
+
+### Application Layer
+
+- **Database**: PostgreSQL with replication
+- **Connection Pooling**: PgBouncer
+- **Backend**: Node.js API containers
+- **Frontend**: React.js static containers
+
+## Key Features
+
+### Multi-Cloud Support
+
+The infrastructure code supports deployment to both AWS and Azure using the same codebase, allowing for cloud flexibility and disaster recovery options.
+
+### Database High Availability
+
+PostgreSQL is deployed with a primary-replica setup for data resilience, with automatic failover capabilities through repmgr.
+
+### Automated SSL Certificates
+
+Traefik automatically handles SSL certificate provisioning and renewal through Let's Encrypt.
+
+### Simplified DevOps
+
+Comprehensive scripts for deployment, updates, and maintenance tasks reduce operational complexity.
 
 ## Documentation
 
-- [README.md](./README.md) - This overview file
-- [DEPLOYMENT.md](./DEPLOYMENT.md) - Comprehensive deployment instructions
-- [CLI-REFERENCE.md](./CLI-REFERENCE.md) - Detailed command-line reference
+- [DEPLOYMENT.md](./DEPLOYMENT.md) - Detailed deployment instructions
+- [CLI-REFERENCE.md](./CLI-REFERENCE.md) - Command-line reference guide
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please follow these steps:
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
@@ -110,6 +145,6 @@ This project is licensed under the AGPL License - see the [LICENSE](LICENSE) fil
 
 ## Acknowledgments
 
-- André Sacilotto Santos - Lead Developer and Software Architect during MVP (AGES III)
+- André Sacilotto Santos - Lead Developer and Software Architect
 - Agência Experimental de Engenharia de Software (AGES) - Project Scope and Stakeholders Management
 - Hortti - Original Project Idea and Business Requirements
