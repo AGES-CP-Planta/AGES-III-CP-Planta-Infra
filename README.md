@@ -2,7 +2,7 @@
 
 Cloud-agnostic Infrastructure as Code (IaC) and Configuration as Code (CaC) for the CP-Planta application, supporting AWS and Azure platforms with Docker Swarm orchestration.
 
-![Banner](https://via.placeholder.com/800x200?text=CP-Planta+Infrastructure)
+![Banner](https://avatars.githubusercontent.com/u/202462667?s=200&v=4)
 
 ## Overview
 
@@ -62,14 +62,15 @@ The infrastructure is designed as a multi-tier application with:
    ```
 
 4. Access your application via the displayed endpoints:
-   - Frontend: https://cpplanta.duckdns.org
-   - API: https://api.cpplanta.duckdns.org
-   - PgAdmin: https://pgadmin.cpplanta.duckdns.org
-   - Visualizer: https://viz.cpplanta.duckdns.org
+
+   - Frontend: <https://cpplanta.duckdns.org>
+   - API: <https://api.cpplanta.duckdns.org>
+   - PgAdmin: <https://pgadmin.cpplanta.duckdns.org>
+   - Visualizer: <https://viz.cpplanta.duckdns.org>
 
 ## Project Structure
 
-```
+```plaintext
 CP-Planta-Infra/
 ├── .github/workflows/     # GitHub Actions workflows
 ├── terraform/             # Infrastructure as Code
