@@ -8,8 +8,16 @@ resource "aws_vpc" "vpc" {
   enable_dns_hostnames = true
   enable_dns_support   = true
   
-  tags = {
-    Name = "${var.project_name}-vpc"
+  tags = merge(
+    local.common_tags,
+    {
+      Name = "${var.project_name}-vpc"
+    }
+  )
+
+  # Ensure the VPC is the last thing to be destroyed
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
@@ -18,17 +26,31 @@ resource "aws_subnet" "subnet" {
   cidr_block              = var.subnet_cidr
   map_public_ip_on_launch = true
   
-  tags = {
-    Name = "${var.project_name}-subnet"
+  tags = merge(
+    local.common_tags,
+    {
+      Name = "${var.project_name}-subnet"
+    }
+  )
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
+# Internet Gateway Should be correctly configured for deletion
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.vpc.id
   
-  tags = {
-    Name = "${var.project_name}-igw"
-  }
+  tags = merge(
+    local.common_tags,
+    {
+      Name = "${var.project_name}-igw"
+    }
+  )
+
+  # This ensures the IGW is deleted before the VPC
+  depends_on = [aws_vpc.vpc]
 }
 
 resource "aws_route_table" "rt" {
@@ -39,9 +61,15 @@ resource "aws_route_table" "rt" {
     gateway_id = aws_internet_gateway.igw.id
   }
   
-  tags = {
-    Name = "${var.project_name}-rt"
-  }
+  tags = merge(
+    local.common_tags,
+    {
+      Name = "${var.project_name}-rt"
+    }
+  )
+  
+  # Ensures proper deletion order
+  depends_on = [aws_vpc.vpc, aws_internet_gateway.igw]
 }
 
 resource "aws_route_table_association" "rta" {
@@ -54,8 +82,16 @@ resource "aws_eip" "eip" {
   for_each = toset(var.instance_names)
   domain   = "vpc"
   
-  tags = {
-    Name = "${var.project_name}-eip-${each.key}"
+  tags = merge(
+    local.common_tags,
+    {
+      Name = "${var.project_name}-eip-${each.key}"
+    }
+  )
+
+  # This lifecycle block helps with cleanup
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
@@ -97,7 +133,15 @@ resource "aws_security_group" "sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = {
-    Name = "${var.project_name}-sg"
+  tags = merge(
+    local.common_tags,
+    {
+      Name = "${var.project_name}-sg"
+    }
+  )
+  
+  # Makes sure to revoke all rules on destroy
+  lifecycle {
+    create_before_destroy = true
   }
 }

@@ -45,9 +45,20 @@ resource "aws_instance" "instance" {
     volume_type = "gp2"
   }
   
-  tags = {
-    Name = each.key
+  tags = merge(
+    local.common_tags,
+    {
+      Name = each.key
+    }
+  )
+
+  # Faster and more reliable termination
+  lifecycle {
+    create_before_destroy = true
   }
+  
+  # Ensure termination protection is off
+  disable_api_termination = false
 }
 
 # Associate Elastic IPs with instances

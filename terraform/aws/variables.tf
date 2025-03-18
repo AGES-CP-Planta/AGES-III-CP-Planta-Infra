@@ -1,5 +1,5 @@
 variable "project_name" {
-  default = "cp-planta-ages"
+  default = "cp-planta"
 }
 
 variable "region" {

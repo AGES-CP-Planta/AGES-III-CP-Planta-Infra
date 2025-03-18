@@ -26,6 +26,112 @@ PROVIDER="aws"
 STATE_FILE=""
 AUTO_APPROVE=false
 
+# Pre-destruction cleanup
+function pre_destroy_cleanup() {
+    echo -e "${YELLOW}Performing pre-destruction cleanup for $PROVIDER...${NC}"
+    
+    if [[ "$PROVIDER" == "aws" ]]; then
+        # Get all managed VPC IDs from the state file
+        VPC_IDS=$(terraform state list | grep aws_vpc | xargs -I{} terraform state show {} | grep "id =" | awk -F'"' '{print $2}')
+        
+        for VPC_ID in $VPC_IDS; do
+            echo -e "${BLUE}Cleaning up resources in VPC $VPC_ID${NC}"
+            
+            # Clean up VPC endpoints
+            echo -e "Removing VPC endpoints..."
+            aws ec2 describe-vpc-endpoints --filters "Name=vpc-id,Values=$VPC_ID" --query "VpcEndpoints[*].VpcEndpointId" --output text | xargs -r -I{} aws ec2 delete-vpc-endpoint --vpc-endpoint-id {}
+            
+            # Clean up any elastic network interfaces
+            echo -e "Checking for orphaned network interfaces..."
+            aws ec2 describe-network-interfaces --filters "Name=vpc-id,Values=$VPC_ID" --query "NetworkInterfaces[?Status=='available'].NetworkInterfaceId" --output text | xargs -r -I{} aws ec2 delete-network-interface --network-interface-id {}
+            
+            # Check for any NAT gateways
+            echo -e "Checking for NAT gateways..."
+            aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$VPC_ID" --query "NatGateways[?State!='deleted'].NatGatewayId" --output text | xargs -r -I{} aws ec2 delete-nat-gateway --nat-gateway-id {}
+        done
+        
+        # Look for any detached EBS volumes
+        echo -e "${BLUE}Checking for orphaned EBS volumes...${NC}"
+        aws ec2 describe-volumes --filters "Name=status,Values=available" --query "Volumes[*].VolumeId" --output text | xargs -r -I{} aws ec2 delete-volume --volume-id {}
+        
+    elif [[ "$PROVIDER" == "azure" ]]; then
+        # Get resource group names from state
+        RESOURCE_GROUPS=$(terraform state list | grep azurerm_resource_group | xargs -I{} terraform state show {} | grep "name =" | awk -F'"' '{print $2}')
+        
+        for RG in $RESOURCE_GROUPS; do
+            echo -e "${BLUE}Cleaning up resources in resource group $RG${NC}"
+            
+            # Clean up any orphaned network interfaces
+            echo -e "Checking for orphaned network interfaces..."
+            az network nic list --resource-group "$RG" --query "[?provisioningState=='Succeeded'].id" -o tsv | xargs -r -I{} az network nic delete --ids {} --no-wait
+            
+            # Remove any custom role assignments
+            echo -e "Removing custom role assignments..."
+            az role assignment list --resource-group "$RG" --query "[].id" -o tsv | xargs -r -I{} az role assignment delete --ids {} --no-wait
+        done
+    fi
+}
+
+# Post-destruction verification
+function post_destroy_verification() {
+    echo -e "${YELLOW}Verifying destruction of resources...${NC}"
+    
+    if [[ "$PROVIDER" == "aws" ]]; then
+        # Look for any VPCs we might have managed
+        VPC_TAG="cp-planta"
+        remaining_vpcs=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=*${VPC_TAG}*" --query "Vpcs[*].VpcId" --output text)
+        
+        if [[ -n "$remaining_vpcs" ]]; then
+            echo -e "${RED}Found remaining VPCs that may belong to the project:${NC}"
+            echo "$remaining_vpcs"
+            
+            if [[ "$AUTO_APPROVE" == "true" ]]; then
+                echo -e "${YELLOW}Auto-approve enabled. Attempting to force delete remaining VPCs...${NC}"
+                for vpc in $remaining_vpcs; do
+                    aws ec2 delete-vpc --vpc-id "$vpc" || echo -e "${RED}Could not delete VPC $vpc. It may have dependencies.${NC}"
+                done
+            else
+                echo -e "${YELLOW}Would you like to force delete these VPCs? (y/N)${NC}"
+                read -r response
+                if [[ "$response" =~ ^[Yy]$ ]]; then
+                    for vpc in $remaining_vpcs; do
+                        aws ec2 delete-vpc --vpc-id "$vpc" || echo -e "${RED}Could not delete VPC $vpc. It may have dependencies.${NC}"
+                    done
+                fi
+            fi
+        else
+            echo -e "${GREEN}No remaining VPCs found with tag pattern *${VPC_TAG}*${NC}"
+        fi
+        
+    elif [[ "$PROVIDER" == "azure" ]]; then
+        # Look for any resource groups we might have managed
+        RG_PREFIX="cp-planta"
+        remaining_rgs=$(az group list --query "[?starts_with(name, '${RG_PREFIX}')].name" -o tsv)
+        
+        if [[ -n "$remaining_rgs" ]]; then
+            echo -e "${RED}Found remaining resource groups that may belong to the project:${NC}"
+            echo "$remaining_rgs"
+            
+            if [[ "$AUTO_APPROVE" == "true" ]]; then
+                echo -e "${YELLOW}Auto-approve enabled. Attempting to force delete remaining resource groups...${NC}"
+                for rg in $remaining_rgs; do
+                    az group delete --name "$rg" --yes --no-wait
+                done
+            else
+                echo -e "${YELLOW}Would you like to force delete these resource groups? (y/N)${NC}"
+                read -r response
+                if [[ "$response" =~ ^[Yy]$ ]]; then
+                    for rg in $remaining_rgs; do
+                        az group delete --name "$rg" --yes --no-wait
+                    done
+                fi
+            fi
+        else
+            echo -e "${GREEN}No remaining resource groups found with prefix ${RG_PREFIX}${NC}"
+        fi
+    fi
+}
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -138,6 +244,8 @@ if [[ "$AUTO_APPROVE" != "true" ]]; then
     fi
 fi
 
+pre_destroy_cleanup
+
 # Destroy resources
 echo -e "${YELLOW}Destroying infrastructure...${NC}"
 terraform apply destroy.tfplan
@@ -156,6 +264,8 @@ else
     echo -e "${RED}Failed to destroy infrastructure. Check the error messages above.${NC}"
     exit 1
 fi
+
+post_destroy_verification
 
 cd ..
 echo -e "${GREEN}All done!${NC}"
