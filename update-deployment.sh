@@ -7,6 +7,13 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Default values
+PROVIDER="aws"
+SERVICE="all"
+FORCE_UPDATE=false
+UPDATE_INFRA=false
+CLEAN_DOCKER=true  # New option for Docker cleanup
+
 # Help function
 function show_help {
     echo -e "${BLUE}Usage: ./update-deployment.sh [OPTIONS]${NC}"
@@ -17,16 +24,11 @@ function show_help {
     echo -e "  -s, --service     Specify service to update (all, frontend, backend, db), default: all"
     echo -e "  -f, --force       Force update even if no changes detected"
     echo -e "  -i, --infra       Update infrastructure (Terraform apply)"
+    echo -e "  -c, --no-clean    Skip Docker cleanup (prune unused containers, images, etc.)"
     echo -e "  -h, --help        Show this help message"
     echo ""
-    echo -e "Example: ./update-deployment.sh --provider aws --service backend"
+    echo -e "Example: ./update-deployment.sh --provider aws --service backend --force"
 }
-
-# Default values
-PROVIDER="aws"
-SERVICE="all"
-FORCE_UPDATE=false
-UPDATE_INFRA=false
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -45,6 +47,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -i|--infra)
             UPDATE_INFRA=true
+            shift
+            ;;
+        -c|--no-clean)
+            CLEAN_DOCKER=false
             shift
             ;;
         -h|--help)
@@ -144,9 +150,9 @@ if [[ "$UPDATE_INFRA" == "true" ]]; then
     echo -e "${YELLOW}Updating infrastructure with Terraform...${NC}"
     
     if [[ "$PROVIDER" == "aws" ]]; then
-        cd TerraformAWS
+        cd terraform/aws
     elif [[ "$PROVIDER" == "azure" ]]; then
-        cd TerraformAzure
+        cd terraform/azure
     fi
     
     terraform init
@@ -165,7 +171,7 @@ if [[ "$UPDATE_INFRA" == "true" ]]; then
         exit 1
     fi
     
-    cd ..
+    cd ../..
 fi
 
 # Determine inventory file
@@ -194,9 +200,28 @@ fi
 
 echo -e "${YELLOW}Manager node IP: $MANAGER_IP${NC}"
 
+# Function to clean up Docker resources
+function clean_docker_resources {
+    echo -e "${YELLOW}Cleaning up unused Docker resources...${NC}"
+    
+    # Remove unused containers
+    ansible -i ../../$INVENTORY_FILE all -m shell -a "docker container prune -f" --become
+    
+    # Remove unused networks
+    ansible -i ../../$INVENTORY_FILE all -m shell -a "docker network prune -f" --become
+    
+    # Remove unused volumes (careful with this one - only if you're sure data is backed up)
+    ansible -i ../../$INVENTORY_FILE all -m shell -a "docker volume ls -qf dangling=true | xargs -r docker volume rm" --become
+    
+    # Remove unused images
+    ansible -i ../../$INVENTORY_FILE all -m shell -a "docker image prune -f" --become
+    
+    echo -e "${GREEN}Docker cleanup completed.${NC}"
+}
+
 # Copy updated stack files if needed
 echo -e "${YELLOW}Copying updated stack file to manager node...${NC}"
-ansible -i ../../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m copy -a "src=./playbooks/stack.yml dest=/home/{{ ansible_ssh_user }}/stack.yml" --become
+ansible -i ../../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m copy -a "src=../swarm/stack.yml dest=/home/{{ ansible_ssh_user }}/stack.yml" --become
 
 # Update DNS configuration files if needed
 echo -e "${YELLOW}Updating DNS configuration...${NC}"
@@ -206,6 +231,11 @@ ansible -i ../../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m copy -a "src=../rol
 
 # Update DNS zone file with manager IP
 ansible -i ../../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m replace -a "path=/home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db regexp='10\\.0\\.1\\.10' replace='{{ ansible_default_ipv4.address }}'" --become
+
+# Clean Docker resources if enabled
+if [[ "$CLEAN_DOCKER" == "true" ]]; then
+    clean_docker_resources
+fi
 
 # Redeploy the stack
 echo -e "${YELLOW}Redeploying stack on manager node...${NC}"
@@ -242,8 +272,8 @@ echo -e "${YELLOW}Service status:${NC}"
 ansible -i ../../$INVENTORY_FILE $MANAGER_GROUP --limit 1 -m shell -a "docker service ls" --become
 
 # Update deployment marker
-git rev-parse HEAD > ../.last_deployment
+git rev-parse HEAD > ../../.last_deployment
 echo -e "${GREEN}Updated deployment marker to current commit.${NC}"
 
-cd ..
+cd ../..
 echo -e "${GREEN}Update process completed on $PROVIDER.${NC}"

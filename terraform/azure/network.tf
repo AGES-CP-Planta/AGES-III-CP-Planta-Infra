@@ -9,6 +9,10 @@ resource "azurerm_virtual_network" "vnet" {
   address_space       = var.address_space
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
+
+  tags = local.common_tags
+
+  depends_on = [azurerm_resource_group.rg]
 }
 
 # Create a subnet
@@ -17,6 +21,11 @@ resource "azurerm_subnet" "subnet" {
   resource_group_name  = azurerm_resource_group.rg.name
   virtual_network_name = azurerm_virtual_network.vnet.name
   address_prefixes     = var.subnet_prefixes
+
+  # Ensure subnets are deleted first
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "azurerm_public_ip" "public_ip" {
@@ -43,11 +52,19 @@ resource "azurerm_network_interface" "nic" {
     private_ip_address_allocation = "Dynamic"
     public_ip_address_id          = azurerm_public_ip.public_ip[each.key].id
   }
+
+  tags = merge (
+    local.common_tags,
+    {
+      Name = "${var.resource_group_name}-nic-${each.key}"
+    }
+  )
   
-  tags = {
-    Name = "${var.resource_group_name}-nic-${each.key}"
+  lifecycle {
+    create_before_destroy = true
   }
 }
+
 # Associate NSG with NICs
 resource "azurerm_network_interface_security_group_association" "nsg_association" {
   for_each                  = azurerm_network_interface.nic
@@ -102,5 +119,13 @@ resource "azurerm_network_security_group" "nsg" {
     destination_port_range     = "*"
     source_address_prefix      = "*"
     destination_address_prefix = "*"
+  }
+
+  tags = local.common_tags  
+
+  # Prevent "operation still running" errors
+  timeouts {
+    create = "30m"
+    delete = "30m"
   }
 }

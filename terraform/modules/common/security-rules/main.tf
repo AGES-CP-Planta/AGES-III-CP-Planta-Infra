@@ -1,7 +1,18 @@
+// terraform/modules/common/security-rules/main.tf
 variable "environment_name" {
   description = "Environment name for naming resources"
   type        = string
   default     = "cp-planta"
+}
+
+variable "project_tags" {
+  description = "Project tags to be applied to all resources"
+  type        = map(string)
+  default     = {
+    Project     = "cp-planta"
+    ManagedBy   = "terraform"
+    Owner       = "ages"
+  }
 }
 
 # Common service ports used in both AWS and Azure
@@ -25,9 +36,7 @@ locals {
     docker_swarm_overlay = 4789,
     dns_udp              = 53
   }
-}
-
-locals {
+  
   # Generate numbered tcp rules starting at priority 100
   tcp_rules_with_priority = {
     for i, name in keys(local.common_tcp_ports) : name => {
@@ -45,6 +54,14 @@ locals {
       name = name  
     }
   }
+  
+  # Common tags that will be applied to all resources
+  all_tags = merge(
+    var.project_tags,
+    {
+      Environment = var.environment_name
+    }
+  )
 }
 
 output "common_tcp_ports" {
@@ -54,7 +71,6 @@ output "common_tcp_ports" {
 output "common_udp_ports" {
   value = local.common_udp_ports
 }
-
 
 output "tcp_rules_with_priority" {
   value = local.tcp_rules_with_priority
@@ -66,4 +82,8 @@ output "udp_rules_with_priority" {
 
 output "environment_name" {
   value = var.environment_name
+}
+
+output "resource_tags" {
+  value = local.all_tags
 }

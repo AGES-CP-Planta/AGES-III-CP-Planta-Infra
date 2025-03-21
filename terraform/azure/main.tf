@@ -1,3 +1,11 @@
+locals {
+  common_tags = {
+    Project     = "cp-planta"
+    ManagedBy   = "terraform"
+    Owner       = "ages"
+  }
+}
+
 terraform {
   required_version = ">= 0.13"
 
