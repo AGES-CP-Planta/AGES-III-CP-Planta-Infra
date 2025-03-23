@@ -162,8 +162,7 @@ done
 # Set project vars from .env file if it exists
 if [[ -f .env ]]; then
     echo -e "${YELLOW}Loading environment variables from .env file...${NC}"
-    export $(grep -v '^#' .env | xargs)
-
+    export $(grep -v '^#' .env | grep -v '^\s*$' | xargs -d '\n')
     
     # Export Terraform-specific variables
     if [[ "$PROVIDER" == "azure" ]]; then
