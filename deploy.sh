@@ -7,26 +7,215 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Help function
-function show_help {
-    echo -e "${BLUE}Usage: ./deploy.sh [OPTIONS]${NC}"
-    echo -e "Deploy infrastructure on AWS or Azure and configure Docker Swarm"
-    echo ""
-    echo -e "Options:"
-    echo -e "  -p, --provider    Specify cloud provider (aws or azure), default: aws"
-    echo -e "  -s, --skip-terraform Skip the Terraform provisioning step (use existing infrastructure)"
-    echo -e "  -u, --update      Run in update mode (use update-deployment.sh if infrastructure exists)"
-    echo -e "  --no-interactive   Run in non-interactive mode"
-    echo -e "  -h, --help        Show this help message"
-    echo ""
-    echo -e "Example: ./deploy.sh --provider aws"
-}
-
 # Default values
 PROVIDER="aws"
 SKIP_TERRAFORM=false
-CHECK_UPDATE=true
-INTERACTIVE=true 
+INTERACTIVE=true
+DEPLOYMENT_LOG="deployment_$(date +%Y%m%d_%H%M%S).log"
+ROLLBACK_ENABLED=true
+
+# Create log file
+touch $DEPLOYMENT_LOG
+exec > >(tee -a $DEPLOYMENT_LOG)
+exec 2>&1
+
+echo "==========================================="
+echo "CP-Planta Deployment - $(date)"
+echo "==========================================="
+
+# Function for error handling
+function handle_error {
+    local exit_code=$?
+    local error_message=$1
+    local step=$2
+    
+    echo -e "${RED}ERROR: $error_message (Exit Code: $exit_code)${NC}" 
+    echo -e "${RED}Deployment failed during step: $step${NC}"
+    
+    if [[ "$ROLLBACK_ENABLED" == "true" && "$step" != "pre-deployment" ]]; then
+        echo -e "${YELLOW}Initiating rollback procedure...${NC}"
+        
+        case "$step" in
+            "terraform")
+                echo -e "${YELLOW}Rolling back infrastructure changes...${NC}"
+                if [[ "$PROVIDER" == "aws" ]]; then
+                    cd terraform/aws
+                elif [[ "$PROVIDER" == "azure" ]]; then
+                    cd terraform/azure
+                fi
+                terraform destroy -auto-approve -target=$(terraform state list | tail -n 1)
+                cd ../..
+                ;;
+            "ansible")
+                echo -e "${YELLOW}Cannot automatically rollback Ansible changes.${NC}"
+                echo -e "${YELLOW}Manual intervention may be required.${NC}"
+                ;;
+            "swarm")
+                echo -e "${YELLOW}Rolling back Docker Swarm deployment...${NC}"
+                # Get manager node from inventory
+                MANAGER_IP=$(grep -A1 '\[instance1\]' static_ip.ini | tail -n1 | awk '{print $1}')
+                if [[ -n "$MANAGER_IP" ]]; then
+                    echo -e "${YELLOW}Connecting to manager node $MANAGER_IP...${NC}"
+                    ssh -i ssh_keys/instance1.pem ubuntu@$MANAGER_IP "docker stack rm CP-Planta"
+                fi
+                ;;
+        esac
+    fi
+    
+    echo -e "${YELLOW}See log file for details: $DEPLOYMENT_LOG${NC}"
+    exit 1
+}
+
+# Pre-deployment validation
+function validate_environment {
+    echo -e "${BLUE}Validating deployment environment...${NC}"
+    
+    # Check required tools
+    for cmd in terraform ansible-playbook aws az jq; do
+        if ! command -v $cmd &> /dev/null; then
+            echo -e "${RED}Error: Required tool '$cmd' is not installed.${NC}"
+            handle_error "Missing required tool: $cmd" "pre-deployment"
+        fi
+    done
+    
+    # Check credentials
+    if [[ "$PROVIDER" == "aws" ]]; then
+        echo -e "${YELLOW}Validating AWS credentials...${NC}"
+        if ! aws sts get-caller-identity &> /dev/null; then
+            handle_error "Invalid AWS credentials" "pre-deployment"
+        fi
+    elif [[ "$PROVIDER" == "azure" ]]; then
+        echo -e "${YELLOW}Validating Azure credentials...${NC}"
+        if ! az account show &> /dev/null; then
+            handle_error "Invalid Azure credentials" "pre-deployment"
+        fi
+    fi
+    
+    # Check for required files
+    if [[ ! -f ".env" ]]; then
+        echo -e "${RED}Error: .env file not found.${NC}"
+        handle_error "Missing .env file" "pre-deployment"
+    fi
+    
+    echo -e "${GREEN}Environment validation passed.${NC}"
+}
+
+# Run Terraform with error handling
+function run_terraform {
+    echo -e "${BLUE}Running Terraform for $PROVIDER...${NC}"
+    
+    if [[ "$PROVIDER" == "aws" ]]; then
+        cd terraform/aws
+    elif [[ "$PROVIDER" == "azure" ]]; then
+        cd terraform/azure
+    fi
+    
+    echo -e "${YELLOW}Initializing Terraform...${NC}"
+    terraform init || handle_error "Terraform initialization failed" "terraform"
+    
+    echo -e "${YELLOW}Planning Terraform changes...${NC}"
+    terraform plan -out=tf.plan || handle_error "Terraform plan failed" "terraform"
+    
+    echo -e "${YELLOW}Applying Terraform changes...${NC}"
+    terraform apply tf.plan || handle_error "Terraform apply failed" "terraform"
+    
+    # Save Terraform state
+    echo -e "${YELLOW}Saving Terraform state...${NC}"
+    if [[ -d "../../.git" ]]; then
+        mkdir -p ../../terraform-state
+        cp terraform.tfstate ../../terraform-state/terraform-${PROVIDER}-$(date +%Y%m%d).tfstate
+    fi
+    
+    cd ../..
+    echo -e "${GREEN}Terraform execution completed successfully.${NC}"
+    
+    echo -e "${YELLOW}Waiting for instances to initialize (60 seconds)...${NC}"
+    for i in {1..60}; do
+        echo -n "."
+        sleep 1
+        if (( i % 10 == 0 )); then
+            echo " $i seconds"
+        fi
+    done
+    echo ""
+}
+
+# Run Ansible with error handling
+function run_ansible {
+    echo -e "${BLUE}Running Ansible playbooks...${NC}"
+    
+    # Verify inventory file exists
+    if [[ ! -f "static_ip.ini" ]]; then
+        handle_error "Inventory file static_ip.ini not found" "ansible"
+    fi
+    
+    # Set proper permissions for SSH keys
+    echo -e "${YELLOW}Setting SSH key permissions...${NC}"
+    chmod 400 ssh_keys/*.pem
+    
+    # Run Ansible playbook with progress
+    echo -e "${YELLOW}Deploying infrastructure via Ansible...${NC}"
+    cd deployment/ansible
+    
+    # Test connectivity
+    echo -e "${YELLOW}Testing connectivity to hosts...${NC}"
+    ansible -i ../../static_ip.ini all -m ping || handle_error "Ansible connectivity test failed" "ansible"
+    
+    # Run main playbook
+    echo -e "${YELLOW}Running main Swarm setup playbook...${NC}"
+    ansible-playbook -i ../../static_ip.ini ./playbooks/swarm_setup.yml || handle_error "Ansible playbook execution failed" "ansible"
+    
+    cd ../..
+}
+
+# Verify deployment
+function verify_deployment {
+    echo -e "${BLUE}Verifying deployment...${NC}"
+    
+    # Get manager node IP
+    MANAGER_IP=$(grep -A1 '\[instance1\]' static_ip.ini | tail -n1 | awk '{print $1}')
+    MANAGER_KEY=$(grep -A1 '\[instance1\]' static_ip.ini | tail -n1 | grep -o 'ansible_ssh_private_key_file=[^ ]*' | cut -d= -f2)
+    
+    if [[ -z "$MANAGER_IP" ]]; then
+        echo -e "${RED}Could not determine manager node IP.${NC}"
+        handle_error "Manager IP resolution failed" "verification"
+    fi
+    
+    echo -e "${YELLOW}Checking Docker Swarm status...${NC}"
+    ssh -i $MANAGER_KEY ubuntu@$MANAGER_IP "docker node ls" || handle_error "Docker Swarm status check failed" "verification"
+    
+    echo -e "${YELLOW}Checking Docker services status...${NC}"
+    ssh -i $MANAGER_KEY ubuntu@$MANAGER_IP "docker service ls" || handle_error "Docker services status check failed" "verification"
+    
+    # Check HTTP endpoints (with retry)
+    echo -e "${YELLOW}Waiting for HTTP endpoints to become available...${NC}"
+    
+    # Update DNS first
+    echo -e "${YELLOW}Updating DNS records...${NC}"
+    ./duckdns-updater.sh
+    
+    # Wait for DNS propagation
+    echo -e "${YELLOW}Waiting for DNS propagation (30 seconds)...${NC}"
+    sleep 30
+    
+    # Test endpoints with retry
+    for domain in cpplanta.duckdns.org api.cpplanta.duckdns.org pgadmin.cpplanta.duckdns.org; do
+        echo -e "${YELLOW}Testing $domain...${NC}"
+        max_retries=5
+        retry_count=0
+        while ! curl -s -o /dev/null -w "%{http_code}" https://$domain; do
+            retry_count=$((retry_count+1))
+            if [[ $retry_count -ge $max_retries ]]; then
+                echo -e "${RED}Failed to connect to $domain after $max_retries attempts.${NC}"
+                break
+            fi
+            echo -e "${YELLOW}Retrying in 10 seconds...${NC}"
+            sleep 10
+        done
+    done
+    
+    echo -e "${GREEN}Deployment verification completed.${NC}"
+}
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -39,298 +228,40 @@ while [[ $# -gt 0 ]]; do
             SKIP_TERRAFORM=true
             shift
             ;;
-        -u|--update)
-            CHECK_UPDATE=true
-            shift
-            ;;
         --no-interactive)
             INTERACTIVE=false
             shift
             ;;
-        -h|--help)
-            show_help
-            exit 0
+        --no-rollback)
+            ROLLBACK_ENABLED=false
+            shift
             ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
-            show_help
             exit 1
             ;;
     esac
 done
 
-# Check if this is an update to existing infrastructure
-if [[ "$CHECK_UPDATE" == "true" ]]; then
-    INVENTORY_FILE="static_ip.ini"
-    
-    if [[ -f "$INVENTORY_FILE" ]]; then
-        # Attempt to verify connectivity to existing infrastructure
-        echo -e "${YELLOW}Detected existing inventory file. Checking if infrastructure exists...${NC}"
-        
-        MANAGER_GROUP="instance1"
-        
-        # Try to ping the first host in inventory with timeout
-        FIRST_HOST=$(grep -m1 ansible_ssh_user $INVENTORY_FILE | awk '{print $1}')
-        if [[ -n "$FIRST_HOST" ]]; then
-            ping -c 1 -W 3 $FIRST_HOST >/dev/null 2>&1
-            
-            if [ $? -eq 0 ]; then
-                echo -e "${GREEN}Existing infrastructure detected.${NC}"
-                echo -e "${YELLOW}Switching to update mode...${NC}"
-                
-                if [[ -f "update-deployment.sh" ]]; then
-                    echo -e "${YELLOW}Running update-deployment.sh...${NC}"
-                    chmod +x update-deployment.sh
-                    ./update-deployment.sh --provider $PROVIDER
-                    exit $?
-                else
-                    echo -e "${RED}update-deployment.sh not found. Creating it...${NC}"
-                    # Create update script
-                    cat > update-deployment.sh << 'EOL'
-#!/bin/bash
-# Auto-generated update-deployment.sh
-# Please see update-deployment.sh documentation for full features
+# Main execution flow
+validate_environment
 
-# Colors for output
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Default values
-PROVIDER="aws"
-SERVICE="all"
-
-# Parse command line arguments
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        -p|--provider)
-            PROVIDER="$2"
-            shift 2
-            ;;
-        -s|--service)
-            SERVICE="$2"
-            shift 2
-            ;;
-        *)
-            shift
-            ;;
-    esac
-done
-
-# Set project vars
-if [[ -f .env ]]; then
-    echo -e "${YELLOW}Loading environment variables from .env file...${NC}"
-    export $(grep -v '^#' .env | xargs)
-fi
-
-# Determine inventory file
-INVENTORY_FILE="static_ip.ini"
-
-echo -e "${YELLOW}Updating Docker Swarm services...${NC}"
-cd deployment/ansible
-
-# Update existing stack
-ansible-playbook -i ../../../$INVENTORY_FILE ./playbooks/swarm_setup.yml 
-
-cd ..
-echo -e "${GREEN}Update completed successfully!${NC}"
-exit 0
-EOL
-                    chmod +x update-deployment.sh
-                    ./update-deployment.sh --provider $PROVIDER
-                    exit $?
-                fi
-            fi
-        fi
-    fi
-fi
-
-# Set project vars
-if [[ -f .env ]]; then
-    echo -e "${YELLOW}Loading environment variables from .env file...${NC}"
-    export $(grep -v '^#' .env | xargs)
-
-    # Export Terraform-specific variables
-    if [[ "$PROVIDER" == "azure" ]]; then
-        export TF_VAR_azure_subscription_id="$AZURE_SUBSCRIPTION_ID"
-    fi
-else
-    echo -e "${YELLOW}Warning: .env file not found, using default environment settings${NC}"
-fi
-
-# Create directories if they don't exist
-mkdir -p ssh_keys Swarm
-
-# Check for existing resources
-if [[ "$SKIP_TERRAFORM" == "false" ]]; then
-    echo -e "${YELLOW}Checking for existing resources...${NC}"
-    
-    chmod +x ./check-existing-resources.sh
-    
-    # First check if resources exist
-    ./check-existing-resources.sh --provider $PROVIDER --action check
-    
-    if [ $? -eq 0 ]; then
-        if [[ "$INTERACTIVE" == "true" ]]; then
-            # Interactive mode - prompt user for choice
-            echo -e "${YELLOW}Would you like to:${NC}"
-            echo -e "  1) ${BLUE}Import${NC} existing resources into Terraform state"
-            echo -e "  2) ${BLUE}Delete${NC} existing resources and create new ones"
-            echo -e "  3) ${BLUE}Skip${NC} Terraform provisioning entirely"
-            echo -e "  4) ${BLUE}Continue${NC} anyway (might fail if resources exist)"
-            echo -e "  5) ${RED}Abort${NC} deployment"
-            read -p "Enter your choice (1-5): " RESOURCE_ACTION
-            
-            case $RESOURCE_ACTION in
-                1)
-                    echo -e "${YELLOW}Importing existing resources...${NC}"
-                    ./check-existing-resources.sh --provider $PROVIDER --action import
-                    ;;
-                2)
-                    echo -e "${YELLOW}Deleting existing resources...${NC}"
-                    ./check-existing-resources.sh --provider $PROVIDER --action delete
-                    ;;
-                3)
-                    echo -e "${YELLOW}Skipping Terraform provisioning...${NC}"
-                    SKIP_TERRAFORM=true
-                    ;;
-                4)
-                    echo -e "${YELLOW}Continuing with Terraform apply...${NC}"
-                    ;;
-                5|*)
-                    echo -e "${RED}Deployment aborted.${NC}"
-                    exit 1
-                    ;;
-            esac
-        else
-            # Non-interactive mode - assume default action (import)
-            echo -e "${YELLOW}Running in non-interactive mode. Importing existing resources...${NC}"
-            ./check-existing-resources.sh --provider $PROVIDER --action import
-        fi
-    fi
-fi
-
-# Provision infrastructure with Terraform if not skipped
-if [[ "$SKIP_TERRAFORM" == "false" ]]; then
-    echo -e "${BLUE}Selected provider: $PROVIDER${NC}"
-    echo -e "${YELLOW}Running Terraform for $PROVIDER...${NC}"
-
-    if [[ "$PROVIDER" == "aws" ]]; then
-        cd terraform/aws
-        terraform init
-        
-        # Check if terraform plan works before applying
-        echo -e "${YELLOW}Checking Terraform plan...${NC}"
-        terraform plan -out=tf.plan
-        
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}Terraform plan failed. Please check your configuration and AWS credentials.${NC}"
-            exit 1
-        fi
-        
-        echo -e "${YELLOW}Applying Terraform plan...${NC}"
-        terraform apply tf.plan
-        
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}Terraform apply failed.${NC}"
-            exit 1
-        fi
-    elif [[ "$PROVIDER" == "azure" ]]; then
-        cd terraform/azure
-        terraform init
-        
-        # Check if terraform plan works before applying
-        echo -e "${YELLOW}Checking Terraform plan...${NC}"
-        terraform plan -out=tf.plan
-        
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}Terraform plan failed. Please check your configuration and Azure credentials.${NC}"
-            exit 1
-        fi
-        
-        echo -e "${YELLOW}Applying Terraform plan...${NC}"
-        terraform apply -auto-approve tf.plan
-        
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}Terraform apply failed.${NC}"
-            exit 1
-        fi
-    fi
-
-    echo -e "${YELLOW}Waiting for instances to initialize (40 seconds)...${NC}"
-    sleep 40
-
-    # Return to project root
-    cd ..
-
+if [[ "$SKIP_TERRAFORM" != "true" ]]; then
+    run_terraform
 else
     echo -e "${YELLOW}Skipping Terraform provisioning as requested.${NC}"
 fi
 
-# Set correct permissions for SSH keys
-echo -e "${YELLOW}Setting proper permissions for SSH keys...${NC}"
-chmod 400 ssh_keys/*.pem
+run_ansible
+verify_deployment
 
-# Deploy the stack on Docker Swarm
-echo -e "${YELLOW}Deploying Docker Swarm stack...${NC}"
-cd deployment/ansible
+# Save successful deployment marker
+git rev-parse HEAD > .last_deployment 2>/dev/null || echo "$(date)" > .last_deployment
 
-echo -e "${YELLOW}Using single-region configuration...${NC}"
-ANSIBLE_CONFIG=./ansible.cfg ansible-playbook -i ../../../static_ip.ini ./playbooks/swarm_setup.yml 
-
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: Swarm setup playbook encountered errors.${NC}"
-    echo -e "${YELLOW}Checking Docker Swarm status on manager node...${NC}"
-    
-    # Extract manager IP and key from inventory
-    manager_ip=$(grep -A1 '\[instance1\]' ../../../static_ip.ini | tail -n1 | awk '{print $1}')
-    manager_key=$(grep -A1 '\[instance1\]' ../../../static_ip.ini | tail -n1 | grep -o 'ansible_ssh_private_key_file=[^ ]*' | cut -d= -f2)
-    
-    # Check if Docker Swarm is running on manager
-    ssh -i $manager_key ubuntu@$manager_ip "docker node ls" 2>/dev/null
-    
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}Docker Swarm appears to be running despite errors. You may need to check specific services.${NC}"
-    else
-        echo -e "${RED}Docker Swarm does not appear to be running. Please check logs and resolve issues.${NC}"
-    fi
-else
-    echo -e "${GREEN}Deployment completed successfully!${NC}"
-fi
-
-# Save current git commit as deployment marker
-git rev-parse HEAD > ../.last_deployment 2>/dev/null || echo "unable to create deployment marker" > ../.last_deployment
-
-cd ..
-echo -e "${GREEN}Deployment process completed on $PROVIDER.${NC}"
-echo -e "${YELLOW}You should now be able to access your services at the provided endpoints.${NC}"
-
-# Display node IPs for user reference
-if [[ "$PROVIDER" == "aws" ]]; then
-    echo -e "${BLUE}AWS Instance IPs:${NC}"
-    jq -r '.resources[] | select(.type == "aws_instance") | .instances[] | .attributes.public_ip' terraform/aws/terraform.tfstate
-elif [[ "$PROVIDER" == "azure" ]]; then
-    echo -e "${BLUE}Azure VM IPs:${NC}"
-    jq -r '.resources[] | select(.type == "azurerm_virtual_machine") | .instances[] | .attributes.public_ip_address' terraform/azure/terraform.tfstate
-fi
-
-echo -e "${YELLOW}Updating DNS records...${NC}"
-./duckdns-updater.sh
-
-echo -e "${YELLOW}Verifying DNS resolution...${NC}"
-# Wait for DNS propagation
-sleep 30
-
-# Check external DNS resolution
-for domain in cpplanta.duckdns.org api.cpplanta.duckdns.org pgadmin.cpplanta.duckdns.org viz.cpplanta.duckdns.org traefik.cpplanta.duckdns.org; do
-    echo -n "Checking $domain: "
-    if host $domain > /dev/null; then
-        echo -e "${GREEN}OK${NC}"
-    else
-        echo -e "${RED}Failed${NC}"
-    fi
-done
+echo -e "${GREEN}==========================================${NC}"
+echo -e "${GREEN}Deployment completed successfully!${NC}"
+echo -e "${GREEN}Provider: $PROVIDER${NC}"
+echo -e "${GREEN}Log file: $DEPLOYMENT_LOG${NC}"
+echo -e "${GREEN}==========================================${NC}"
 
 exit 0

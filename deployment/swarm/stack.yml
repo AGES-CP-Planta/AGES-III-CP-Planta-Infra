@@ -1,6 +1,5 @@
 services:
   traefik:
-    # Unchanged - existing configuration
     image: traefik:v2.9
     command:
       - "--api.insecure=false"
@@ -16,9 +15,11 @@ services:
       - "--certificatesresolvers.myresolver.acme.email=sacilotto.andre@gmail.com"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
       - "--log.level=DEBUG"
+      - "--ping=true"
     ports:
       - "80:80"
       - "443:443"
+      - "8090:8080"  # Expose Traefik dashboard on a different host port
     volumes:
       - traefik_data:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -40,9 +41,15 @@ services:
         - "traefik.http.routers.dashboard.rule=Host(`traefik.cpplanta.duckdns.org`)"
         - "traefik.http.routers.dashboard.service=api@internal"
         - "traefik.http.routers.dashboard.entrypoints=websecure"
-        - "traefik.http.routers.dashboard.middlewares=auth"
+        - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
         - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$uyBtMQYo$$TMK6XINUQz.mLxjdJsl1j."
         - "traefik.http.services.traefik-svc.loadbalancer.server.port=8080"
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   # PostgreSQL Primary Node
   postgres_primary:
@@ -163,6 +170,12 @@ services:
     depends_on:
       - postgres_primary
       - postgres_replica
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 6432"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   backend:
     image: norohim/cp-planta-backend:latest
@@ -214,6 +227,12 @@ services:
     entrypoint: ["/bin/sh", "-c", "sleep 30 && node /app/dist/main.js"] # Wait for database to initialize
     ports:
       - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
         
   pgadmin:
     image: norohim/pgadmin:latest
@@ -250,6 +269,12 @@ services:
         - "traefik.http.services.pgadmin.loadbalancer.server.port=5050"
     volumes:
       - pgadmin_data:/var/lib/pgadmin 
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5050/misc/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   frontend:
     image: norohim/cp-planta-frontend:latest
@@ -287,6 +312,12 @@ services:
         - "traefik.http.routers.frontend.entrypoints=websecure"
         - "traefik.http.routers.frontend.tls.certresolver=myresolver"
         - "traefik.http.services.frontend.loadbalancer.server.port=3001"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   dns:
     image: coredns/coredns:1.9.3
@@ -317,6 +348,12 @@ services:
     ports:
       - "53:53/udp"
       - "53:53/tcp"
+    healthcheck:
+      test: ["CMD", "dig", "@127.0.0.1", "cpplanta.duckdns.org"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   duckdns:
     image: linuxserver/duckdns:latest
@@ -344,6 +381,12 @@ services:
         condition: any
       labels:
         - "traefik.enable=false"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "https://www.duckdns.org/update?domains=cpplanta&token=${DUCKDNS_TOKEN}&ip="]
+      interval: 1800s
+      timeout: 30s
+      retries: 3
+      start_period: 10s
 
   visualizer:
     image: dockersamples/visualizer:latest
@@ -361,6 +404,12 @@ services:
         - "traefik.http.routers.visualizer.entrypoints=websecure"
         - "traefik.http.routers.visualizer.tls.certresolver=myresolver"
         - "traefik.http.services.visualizer.loadbalancer.server.port=8080"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
 networks:
   backend_network:
@@ -378,4 +427,4 @@ volumes:
   pgadmin_data:
     driver: local
   traefik_data:
-    driver: local   
+    driver: local
