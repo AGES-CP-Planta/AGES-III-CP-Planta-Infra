@@ -40,3 +40,5 @@ else
 fi
 
 echo -e "${GREEN}DuckDNS update complete!${NC}"
+
+exit 0

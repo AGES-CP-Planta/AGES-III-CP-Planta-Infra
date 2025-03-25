@@ -403,4 +403,5 @@ else
 fi
 
 echo -e "${GREEN}Operation completed successfully!${NC}"
+
 exit 0

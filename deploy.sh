@@ -23,6 +23,20 @@ echo "==========================================="
 echo "CP-Planta Deployment - $(date)"
 echo "==========================================="
 
+# Function to show help
+function show_help {
+    echo -e "${BLUE}Usage: $0 [OPTIONS]${NC}"
+    echo -e "${YELLOW}Options:${NC}"
+    echo -e "  -p, --provider <aws|azure>       Specify the cloud provider (default: aws)"
+    echo -e "  -s, --skip-terraform             Skip Terraform provisioning"
+    echo -e "      --no-interactive             Run in non-interactive mode"
+    echo -e "      --no-rollback                Disable rollback on failure"
+    echo -e "  -h, --help                       Show this help message"
+    echo -e "${YELLOW}Example:${NC}"
+    echo -e "  $0 --provider aws --skip-terraform"
+    exit 0
+}
+
 # Function for error handling
 function handle_error {
     local exit_code=$?
@@ -217,6 +231,7 @@ function verify_deployment {
     echo -e "${GREEN}Deployment verification completed.${NC}"
 }
 
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -236,9 +251,12 @@ while [[ $# -gt 0 ]]; do
             ROLLBACK_ENABLED=false
             shift
             ;;
+        -h|--help)
+            show_help
+            ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
-            exit 1
+            show_help
             ;;
     esac
 done

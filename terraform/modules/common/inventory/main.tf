@@ -17,7 +17,7 @@ variable "inventory_path" {
 
 locals {
   inventory_content = join("\n\n", [
-    for name, ip in var.instance_details : "[${name}]\n${ip} ansible_ssh_user=${var.ssh_user} ansible_ssh_private_key_file=../ssh_keys/${name}.pem"
+    for name, ip in var.instance_details : "[${name}]\n${ip} ansible_ssh_user=${var.ssh_user} ansible_ssh_private_key_file=../../ssh_keys/${name}.pem"
   ])
 }
 

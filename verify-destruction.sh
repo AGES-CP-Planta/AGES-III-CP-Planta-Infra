@@ -50,7 +50,10 @@ done
 # Set project vars from .env file if it exists
 if [[ -f .env ]]; then
     echo -e "${YELLOW}Loading environment variables from .env file...${NC}"
-    export $(grep -v '^#' .env | xargs)
+    while IFS= read -r line; do
+        [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+        export "$line"
+    done < .env
 fi
 
 echo -e "${BLUE}Verifying complete destruction of resources for provider: $PROVIDER${NC}"
@@ -323,3 +326,129 @@ if [[ "$PROVIDER" == "aws" ]]; then
     else
         echo -e "${GREEN}No Load Balancers found with tag pattern *${PROJECT_TAG}*${NC}"
     fi
+
+elif [[ "$PROVIDER" == "azure" ]]; then
+    echo -e "${YELLOW}Checking for Azure resources...${NC}"
+    
+    # Check for resource groups with the project tag/name pattern
+    PROJECT_TAG="cp-planta"
+    
+    # Check for Resource Groups
+    echo -e "${BLUE}Checking for Resource Groups...${NC}"
+    RG_LIST=$(az group list --query "[?contains(name, '${PROJECT_TAG}')].name" -o tsv)
+    
+    if [[ -n "$RG_LIST" ]]; then
+        echo -e "${RED}Found Resource Groups that might belong to the project:${NC}"
+        for rg in $RG_LIST; do
+            echo "- $rg"
+            # Get resource group details
+            az group show --name "$rg" --query "{Name:name,Location:location,Tags:tags}" -o table
+            
+            # Prompt for cleanup or force cleanup
+            if [[ "$FORCE_CLEANUP" == "true" ]]; then
+                echo -e "${YELLOW}Force cleanup enabled. Deleting Resource Group $rg...${NC}"
+                az group delete --name "$rg" --yes --no-wait
+            else
+                echo -e "${YELLOW}Would you like to delete this Resource Group? (y/N)${NC}"
+                read -r response
+                if [[ "$response" =~ ^[Yy]$ ]]; then
+                    echo "Deleting Resource Group $rg..."
+                    az group delete --name "$rg" --yes --no-wait
+                fi
+            fi
+        done
+    else
+        echo -e "${GREEN}No Resource Groups found with name pattern *${PROJECT_TAG}*${NC}"
+    fi
+    
+    # Check for unattached resources that might have been missed by resource group deletion
+    echo -e "${BLUE}Checking for unattached disks...${NC}"
+    DISK_IDS=$(az disk list --query "[?contains(name, '${PROJECT_TAG}') && diskState=='Unattached'].id" -o tsv)
+    
+    if [[ -n "$DISK_IDS" ]]; then
+        echo -e "${RED}Found unattached disks that might belong to the project:${NC}"
+        for disk in $DISK_IDS; do
+            echo "- $disk"
+            # Get disk details
+            az disk show --ids "$disk" --query "{Name:name,Size:diskSizeGb,State:diskState}" -o table
+            
+            # Prompt for cleanup or force cleanup
+            if [[ "$FORCE_CLEANUP" == "true" ]]; then
+                echo -e "${YELLOW}Force cleanup enabled. Deleting unattached disk $disk...${NC}"
+                az disk delete --ids "$disk" --yes
+            else
+                echo -e "${YELLOW}Would you like to delete this unattached disk? (y/N)${NC}"
+                read -r response
+                if [[ "$response" =~ ^[Yy]$ ]]; then
+                    echo "Deleting unattached disk $disk..."
+                    az disk delete --ids "$disk" --yes
+                fi
+            fi
+        done
+    else
+        echo -e "${GREEN}No unattached disks found with name pattern *${PROJECT_TAG}*${NC}"
+    fi
+    
+    # Check for public IPs
+    echo -e "${BLUE}Checking for unattached public IPs...${NC}"
+    IP_IDS=$(az network public-ip list --query "[?contains(name, '${PROJECT_TAG}') && ipConfiguration==null].id" -o tsv)
+    
+    if [[ -n "$IP_IDS" ]]; then
+        echo -e "${RED}Found unattached public IPs that might belong to the project:${NC}"
+        for ip in $IP_IDS; do
+            echo "- $ip"
+            # Get IP details
+            az network public-ip show --ids "$ip" --query "{Name:name,IPAddress:ipAddress,AllocationMethod:publicIpAllocationMethod}" -o table
+            
+            # Prompt for cleanup or force cleanup
+            if [[ "$FORCE_CLEANUP" == "true" ]]; then
+                echo -e "${YELLOW}Force cleanup enabled. Deleting unattached public IP $ip...${NC}"
+                az network public-ip delete --ids "$ip"
+            else
+                echo -e "${YELLOW}Would you like to delete this unattached public IP? (y/N)${NC}"
+                read -r response
+                if [[ "$response" =~ ^[Yy]$ ]]; then
+                    echo "Deleting unattached public IP $ip..."
+                    az network public-ip delete --ids "$ip"
+                fi
+            fi
+        done
+    else
+        echo -e "${GREEN}No unattached public IPs found with name pattern *${PROJECT_TAG}*${NC}"
+    fi
+    
+    # Check for network security groups
+    echo -e "${BLUE}Checking for unused network security groups...${NC}"
+    NSG_IDS=$(az network nsg list --query "[?contains(name, '${PROJECT_TAG}') && networkInterfaces==null && subnets==null].id" -o tsv)
+    
+    if [[ -n "$NSG_IDS" ]]; then
+        echo -e "${RED}Found unused network security groups that might belong to the project:${NC}"
+        for nsg in $NSG_IDS; do
+            echo "- $nsg"
+            # Get NSG details
+            az network nsg show --ids "$nsg" --query "{Name:name,Location:location,ResourceGroup:resourceGroup}" -o table
+            
+            # Prompt for cleanup or force cleanup
+            if [[ "$FORCE_CLEANUP" == "true" ]]; then
+                echo -e "${YELLOW}Force cleanup enabled. Deleting unused network security group $nsg...${NC}"
+                az network nsg delete --ids "$nsg"
+            else
+                echo -e "${YELLOW}Would you like to delete this unused network security group? (y/N)${NC}"
+                read -r response
+                if [[ "$response" =~ ^[Yy]$ ]]; then
+                    echo "Deleting unused network security group $nsg..."
+                    az network nsg delete --ids "$nsg"
+                fi
+            fi
+        done
+    else
+        echo -e "${GREEN}No unused network security groups found with name pattern *${PROJECT_TAG}*${NC}"
+    fi
+else
+    echo -e "${RED}Error: Unsupported provider. This script only supports 'aws' or 'azure'.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}Resource verification completed.${NC}"
+
+exit 0

@@ -113,4 +113,5 @@ process_pgbouncer_config
 process_deployment_config
 
 echo -e "${GREEN}Configuration preparation complete for environment: ${ENV}, deployment type: ${DEPLOY_TYPE}${NC}"
+
 exit 0
