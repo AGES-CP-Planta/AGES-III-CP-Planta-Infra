@@ -44,22 +44,46 @@ function show_help {
 
 # Required secrets for different providers
 AWS_REQUIRED_SECRETS=(
-    "AWS_ACCESS_KEY_ID"
-    "AWS_SECRET_ACCESS_KEY"
-    "PGADMIN_EMAIL"
-    "PGADMIN_PASSWORD"
+    "POSTGRES_USER"
+    "POSTGRES_PASSWORD"
+    "POSTGRES_DB"
+    "PGADMIN_DEFAULT_EMAIL"
+    "PGADMIN_DEFAULT_PASSWORD"
+    "PGADMIN_LISTEN_PORT"
     "DOMAIN_NAME"
     "ACME_EMAIL"
     "DUCKDNS_TOKEN"
+    "DUCKDNS_SUBDOMAIN"
+    "TRAEFIK_DASHBOARD_USER"
+    "TRAEFIK_DASHBOARD_PASSWORD_HASH"
+    "PRIMARY_HOST"
+    "REPLICA_HOST"
+    "BACKEND_PORT"
+    "FRONTEND_PORT"
+    "NEXT_PUBLIC_API_URL"
+    "TZ"
 )
 
 AZURE_REQUIRED_SECRETS=(
     "AZURE_SUBSCRIPTION_ID"
-    "PGADMIN_EMAIL"
-    "PGADMIN_PASSWORD"
+    "POSTGRES_USER"
+    "POSTGRES_PASSWORD"
+    "POSTGRES_DB"
+    "PGADMIN_DEFAULT_EMAIL"
+    "PGADMIN_DEFAULT_PASSWORD"
+    "PGADMIN_LISTEN_PORT"
     "DOMAIN_NAME"
     "ACME_EMAIL"
     "DUCKDNS_TOKEN"
+    "DUCKDNS_SUBDOMAIN"
+    "TRAEFIK_DASHBOARD_USER"
+    "TRAEFIK_DASHBOARD_PASSWORD_HASH"
+    "PRIMARY_HOST"
+    "REPLICA_HOST"
+    "BACKEND_PORT"
+    "FRONTEND_PORT"
+    "NEXT_PUBLIC_API_URL"
+    "TZ"
 )
 
 # Parse command line arguments
@@ -116,25 +140,50 @@ function create_template {
     fi
 
     cat > "$SECRETS_TEMPLATE_FILE" << 'EOL'
-# AWS Provider Credentials
-AWS_ACCESS_KEY_ID=your_aws_access_key_id
-AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
 
 # Azure Provider Credentials
 AZURE_SUBSCRIPTION_ID=your_azure_subscription_id # must have access to the Azure
-AZURE_TENANT_ID=your_azure_tenant_id
-AZURE_CLIENT_ID=your_azure_client_id
-AZURE_CLIENT_SECRET=your_azure_client_secret
+
+# Database Configuration
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=postgres
+PRIMARY_HOST=postgres_primary
+REPLICA_HOST=postgres_replica
+
+# PgAdmin Configuration
+PGADMIN_DEFAULT_EMAIL=your_pgadmin_email@example.com
+PGADMIN_DEFAULT_PASSWORD=your_secure_pgadmin_password
+PGADMIN_LISTEN_PORT=5050
+
+# Traefik Dashboard Configuration
+TRAEFIK_DASHBOARD_USER=admin
+TRAEFIK_DASHBOARD_PASSWORD_HASH=$$apr1$$uyBtMQYo$$TMK6XINUQz.mLxjdJsl1j.
 
 # Application Configuration
-DOMAIN_NAME=cp-planta.yourdomain.com
+DOMAIN_NAME=cpplanta.duckdns.com
 ACME_EMAIL=your_email@example.com
-PGADMIN_EMAIL=your_email@example.com
-PGADMIN_PASSWORD=SecurePassword123
 NEXT_PUBLIC_API_URL=https://api.cpplanta.duckdns.org
+BACKEND_PORT=3000
+FRONTEND_PORT=3001
+
+# Service Ports
+POSTGRES_PRIMARY_PORT=5432
+POSTGRES_REPLICA_PORT=5433
+PGBOUNCER_PORT=6432
+TRAEFIK_DASHBOARD_PORT=8080
 
 # DuckDNS Configuration
 DUCKDNS_TOKEN=your_duckdns_token
+DUCKDNS_SUBDOMAIN=cpplanta
+
+# Regional Configuration
+TZ=America/Sao_Paulo
+
+# AWS Provider Credentials
+# Only needed when using actions with AWS provider (add as secrets in GitHub)
+# secrets.AWS_ACCESS_KEY_ID
+# secrets.AWS_SECRET_ACCESS_KEY
 
 # Optional Configuration
 # DOCKER_REGISTRY_URL=registry.example.com

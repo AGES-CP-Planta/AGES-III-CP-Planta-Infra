@@ -12,14 +12,14 @@ services:
       - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
       - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
-      - "--certificatesresolvers.myresolver.acme.email=sacilotto.andre@gmail.com"
+      - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
       - "--log.level=DEBUG"
       - "--ping=true"
     ports:
       - "80:80"
       - "443:443"
-      - "8090:8080"  # Expose Traefik dashboard on a different host port
+      - "${TRAEFIK_DASHBOARD_PORT:-8090}:8080"  # Expose Traefik dashboard on a different host port
     volumes:
       - traefik_data:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -38,11 +38,11 @@ services:
           memory: 128M
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.dashboard.rule=Host(`traefik.cpplanta.duckdns.org`)"
+        - "traefik.http.routers.dashboard.rule=Host(`traefik.${DOMAIN_NAME:-cpplanta.duckdns.org}`)"
         - "traefik.http.routers.dashboard.service=api@internal"
         - "traefik.http.routers.dashboard.entrypoints=websecure"
         - "traefik.http.routers.dashboard.tls.certresolver=myresolver"
-        - "traefik.http.middlewares.auth.basicauth.users=admin:$$apr1$$uyBtMQYo$$TMK6XINUQz.mLxjdJsl1j."
+        - "traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_DASHBOARD_USER:-admin}:${TRAEFIK_DASHBOARD_PASSWORD_HASH:-$$apr1$$uyBtMQYo$$TMK6XINUQz.mLxjdJsl1j.}"
         - "traefik.http.services.traefik-svc.loadbalancer.server.port=8080"
     healthcheck:
       test: ["CMD", "traefik", "healthcheck", "--ping"]
@@ -55,9 +55,9 @@ services:
   postgres_primary:
     image: norohim/postgres-optimal:latest
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=postgres
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
       - ROLE=primary
       - NODE_ID=1
       - NODE_NAME=primary
@@ -86,9 +86,9 @@ services:
       labels:
         - "traefik.enable=false"
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PRIMARY_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -98,9 +98,9 @@ services:
   postgres_replica:
     image: norohim/postgres-optimal:latest
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=postgres
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
       - ROLE=replica
       - NODE_ID=2
       - NODE_NAME=replica
@@ -130,11 +130,11 @@ services:
       labels:
         - "traefik.enable=false"
     ports:
-      - "5433:5432"
+      - "${POSTGRES_REPLICA_PORT:-5433}:5432"
     depends_on:
       - postgres_primary
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -166,7 +166,7 @@ services:
       labels:
         - "traefik.enable=false"
     ports:
-      - "6432:6432"
+      - "${PGBOUNCER_PORT:-6432}:6432"
     depends_on:
       - postgres_primary
       - postgres_replica
@@ -184,14 +184,14 @@ services:
       # Change to use pgbouncer instead of direct database connection
       - DB_HOST=pgbouncer
       - DB_PORT=6432
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
-      - DB_NAME=postgres
-      - DATABASE_URL=postgresql://postgres:postgres@pgbouncer:6432/postgres
+      - DB_USER=${POSTGRES_USER:-postgres}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - DB_NAME=${POSTGRES_DB:-postgres}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-postgres}
       # Additional environment variables for Prisma
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=postgres
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
     networks:
       - backend_network
       - traefik_network
@@ -220,15 +220,15 @@ services:
         failure_action: rollback
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.backend.rule=Host(`api.cpplanta.duckdns.org`)"
+        - "traefik.http.routers.backend.rule=Host(`api.${DOMAIN_NAME:-cpplanta.duckdns.org}`)"
         - "traefik.http.routers.backend.entrypoints=websecure"
         - "traefik.http.routers.backend.tls.certresolver=myresolver"
-        - "traefik.http.services.backend.loadbalancer.server.port=3000"
+        - "traefik.http.services.backend.loadbalancer.server.port=${BACKEND_PORT:-3000}"
     entrypoint: ["/bin/sh", "-c", "sleep 30 && node /app/dist/main.js"] # Wait for database to initialize
     ports:
-      - "3000:3000"
+      - "${BACKEND_PORT:-3000}:${BACKEND_PORT:-3000}"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${BACKEND_PORT:-3000}/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -237,9 +237,9 @@ services:
   pgadmin:
     image: norohim/pgadmin:latest
     environment:
-      - PGADMIN_DEFAULT_EMAIL=sacilotto.andre@gmail.com
-      - PGADMIN_DEFAULT_PASSWORD=SecurePassword123
-      - PGADMIN_LISTEN_PORT=5050
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL:-sacilotto.andre@gmail.com}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD:-SecurePassword123}
+      - PGADMIN_LISTEN_PORT=${PGADMIN_LISTEN_PORT:-5050}
     depends_on:
       - pgbouncer
       - postgres_primary
@@ -263,14 +263,14 @@ services:
         condition: any
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.pgadmin.rule=Host(`pgadmin.cpplanta.duckdns.org`)"
+        - "traefik.http.routers.pgadmin.rule=Host(`pgadmin.${DOMAIN_NAME:-cpplanta.duckdns.org}`)"
         - "traefik.http.routers.pgadmin.entrypoints=websecure"
         - "traefik.http.routers.pgadmin.tls.certresolver=myresolver"
-        - "traefik.http.services.pgadmin.loadbalancer.server.port=5050"
+        - "traefik.http.services.pgadmin.loadbalancer.server.port=${PGADMIN_LISTEN_PORT:-5050}"
     volumes:
       - pgadmin_data:/var/lib/pgadmin 
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5050/misc/ping"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${PGADMIN_LISTEN_PORT:-5050}/misc/ping"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -280,9 +280,9 @@ services:
     image: norohim/cp-planta-frontend:latest
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=https://api.cpplanta.duckdns.org
-      - PORT=3001
-      - API_URL=https://api.cpplanta.duckdns.org
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://api.cpplanta.duckdns.org}
+      - PORT=${FRONTEND_PORT:-3001}
+      - API_URL=https://api.${DOMAIN_NAME:-cpplanta.duckdns.org}
     networks:
       - frontend_network
       - traefik_network
@@ -308,12 +308,12 @@ services:
         order: start-first
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.frontend.rule=Host(`cpplanta.duckdns.org`)"
+        - "traefik.http.routers.frontend.rule=Host(`${DOMAIN_NAME:-cpplanta.duckdns.org}`)"
         - "traefik.http.routers.frontend.entrypoints=websecure"
         - "traefik.http.routers.frontend.tls.certresolver=myresolver"
-        - "traefik.http.services.frontend.loadbalancer.server.port=3001"
+        - "traefik.http.services.frontend.loadbalancer.server.port=${FRONTEND_PORT:-3001}"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${FRONTEND_PORT:-3001}"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -349,7 +349,7 @@ services:
       - "53:53/udp"
       - "53:53/tcp"
     healthcheck:
-      test: ["CMD", "dig", "@127.0.0.1", "cpplanta.duckdns.org"]
+      test: ["CMD", "dig", "@127.0.0.1", "${DOMAIN_NAME:-cpplanta.duckdns.org}"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -360,9 +360,9 @@ services:
     environment:
       - PUID=1000
       - PGID=1000
-      - TZ=America/Sao_Paulo  
-      - SUBDOMAINS=cpplanta
-      - TOKEN=${DUCKDNS_TOKEN}  
+      - TZ=${TZ:-America/Sao_Paulo}
+      - SUBDOMAINS=${DUCKDNS_SUBDOMAIN:-cpplanta}
+      - TOKEN=${DUCKDNS_TOKEN}
       - LOG_FILE=false
     networks:
       - traefik_network
@@ -382,7 +382,7 @@ services:
       labels:
         - "traefik.enable=false"
     healthcheck:
-      test: ["CMD", "curl", "-f", "https://www.duckdns.org/update?domains=cpplanta&token=${DUCKDNS_TOKEN}&ip="]
+      test: ["CMD", "curl", "-f", "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN:-cpplanta}&token=${DUCKDNS_TOKEN}&ip="]
       interval: 1800s
       timeout: 30s
       retries: 3
@@ -400,7 +400,7 @@ services:
           - node.role == manager
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.visualizer.rule=Host(`viz.cpplanta.duckdns.org`)"
+        - "traefik.http.routers.visualizer.rule=Host(`viz.${DOMAIN_NAME:-cpplanta.duckdns.org}`)"
         - "traefik.http.routers.visualizer.entrypoints=websecure"
         - "traefik.http.routers.visualizer.tls.certresolver=myresolver"
         - "traefik.http.services.visualizer.loadbalancer.server.port=8080"
