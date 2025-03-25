@@ -41,6 +41,36 @@
       state: present
       update_cache: yes
 
+  # Install monitoring tools
+  - name: Install monitoring tools (htop, ctop, etc)
+    apt:
+      name:
+        - htop
+        - iotop
+        - sysstat
+      state: present
+    become: yes
+
+  - name: Check if ctop is already installed
+    stat:
+      path: /usr/local/bin/ctop
+    register: ctop_installed
+
+  - name: Get latest ctop release from GitHub API
+    uri:
+      url: https://api.github.com/repos/bcicen/ctop/releases/latest
+      return_content: yes
+    register: ctop_release
+    when: not ctop_installed.stat.exists
+
+  - name: Install ctop from latest GitHub release
+    get_url:
+      url: "https://github.com/bcicen/ctop/releases/download/{{ ctop_release.json.tag_name }}/ctop-{{ ctop_release.json.tag_name | regex_replace('^v', '') }}-linux-amd64"
+      dest: /usr/local/bin/ctop
+      mode: '0755'
+    become: yes
+    when: not ctop_installed.stat.exists
+
   - name: Add Docker's official GPG key and save it in the recommended keyring
     ansible.builtin.shell: |
       curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
@@ -121,6 +151,7 @@
   - name: Join workers to swarm
     shell: "docker swarm join --token {{ hostvars[groups['instance1'][0]].worker_token }} {{ groups['instance1'][0] }}:2377"
     when: inventory_hostname != manager_node
+    ignore_errors: yes
 
   # Copy configuration files 
   - name: Copy stack.yml to manager
@@ -140,7 +171,7 @@
 
   - name: Copy Corefile to manager
     copy:
-      src: ../roles/networking/dns/Corefile
+      src: ../roles/networking/Corefile
       dest: /home/{{ ansible_ssh_user }}/dns/Corefile
     delegate_to: "{{ manager_node }}"
     run_once: true
@@ -161,43 +192,16 @@
     run_once: true
 
   # Deploy the stack with better resource allocation
-  - name: Deploy the stack on manager (with force update)
+  - name: Deploy the stack on manager
     shell: docker stack deploy --with-registry-auth --resolve-image always -c /home/{{ ansible_ssh_user }}/stack.yml CP-Planta
     args:
       chdir: /home/{{ ansible_ssh_user }}
     delegate_to: "{{ manager_node }}"
     run_once: true
 
-  # Install monitoring tools
-  - name: Install monitoring tools (htop, ctop, etc)
-    apt:
-      name:
-        - htop
-        - iotop
-        - sysstat
-      state: present
-    become: yes
-
-  - name: Add Azure repository key
-    apt_key:
-      url: https://azlux.fr/repo.gpg.key
-      state: present
-
-  - name: Add Azure repository
-    apt_repository:
-      repo: deb http://packages.azlux.fr/debian/ bullseye main
-      state: present
-
-  - name: Install ctop
-    apt:
-      name: ctop
-      state: present
-      update_cache: yes
-    become: yes
-
-  - name: Wait for 25 seconds to show proper service status
+  - name: Wait for 45 seconds to show proper service status
     wait_for:
-      timeout: 30
+      timeout: 45
 
   - name: Show service status
     command: docker service ls

@@ -204,13 +204,13 @@ docker node update --availability active <node-id>
 
 ## DNS Management
 
-### duckdns-updater.sh
+### duckdns-updater.sh (Currently integrated into deploy.sh as a post-deployment step) 
 
-Updates DuckDNS records with your current public IP.
+Updates DuckDNS records with your current public IP address
 
 ```bash
 # Update DuckDNS records
-./duckdns-updater.sh
+./duckdns-updater.sh (deprecated) 
 ```
 
 ### DNS Verification
@@ -323,7 +323,6 @@ gh run download <run-id>
 | `No space left on device` | Disk space issue on node | Clean up old images: `docker system prune -a` |
 | `Unable to connect to the server` | Security group misconfiguration | Check inbound rules for ports 22, 80, 443 |
 | `Terraform state locked` | Previous operation interrupted | `terraform force-unlock <lock-id>` |
-| `DNS resolution failed` | DuckDNS not configured properly | Run `./duckdns-updater.sh` and check records |
 | `Swarm node not ready` | Docker daemon issue | Restart Docker: `systemctl restart docker` |
 | `502 Bad Gateway` | Service not running or Traefik issue | Check service status and logs |
 | `Let's Encrypt rate limit` | Too many certificate requests | Use staging ACME server or wait for limit reset |

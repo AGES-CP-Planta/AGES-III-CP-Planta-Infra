@@ -19,6 +19,10 @@ touch $DEPLOYMENT_LOG
 exec > >(tee -a $DEPLOYMENT_LOG)
 exec 2>&1
 
+# Export environment variables for Ansible and Python
+export ANSIBLE_FORCE_COLOR=true
+export PYTHONIOENCODING=utf-8
+
 echo "==========================================="
 echo "CP-Planta Deployment - $(date)"
 echo "==========================================="
@@ -110,7 +114,7 @@ function validate_environment {
         echo -e "${RED}Error: .env file not found.${NC}"
         handle_error "Missing .env file" "pre-deployment"
     fi
-    
+
     echo -e "${GREEN}Environment validation passed.${NC}"
 }
 
@@ -173,22 +177,21 @@ function run_ansible {
     
     # Test connectivity
     echo -e "${YELLOW}Testing connectivity to hosts...${NC}"
-    ansible -i ../../static_ip.ini all -m ping || handle_error "Ansible connectivity test failed" "ansible"
+    ANSIBLE_CONFIG=./playbooks/ansible.cfg ansible -i ../../static_ip.ini all -m ping || handle_error "Ansible connectivity test failed" "ansible"
     
     # Run main playbook
     echo -e "${YELLOW}Running main Swarm setup playbook...${NC}"
-    ansible-playbook -i ../../static_ip.ini ./playbooks/swarm_setup.yml || handle_error "Ansible playbook execution failed" "ansible"
+    ANSIBLE_CONFIG=./playbooks/ansible.cfg ansible-playbook -i ../../static_ip.ini ./playbooks/swarm_setup.yml || handle_error "Ansible playbook execution failed" "ansible"
     
     cd ../..
 }
 
-# Verify deployment
 function verify_deployment {
     echo -e "${BLUE}Verifying deployment...${NC}"
     
     # Get manager node IP
     MANAGER_IP=$(grep -A1 '\[instance1\]' static_ip.ini | tail -n1 | awk '{print $1}')
-    MANAGER_KEY=$(grep -A1 '\[instance1\]' static_ip.ini | tail -n1 | grep -o 'ansible_ssh_private_key_file=[^ ]*' | cut -d= -f2)
+    MANAGER_KEY=$(realpath "ssh_keys/instance1.pem")
     
     if [[ -z "$MANAGER_IP" ]]; then
         echo -e "${RED}Could not determine manager node IP.${NC}"
@@ -201,34 +204,80 @@ function verify_deployment {
     echo -e "${YELLOW}Checking Docker services status...${NC}"
     ssh -i $MANAGER_KEY ubuntu@$MANAGER_IP "docker service ls" || handle_error "Docker services status check failed" "verification"
     
-    # Check HTTP endpoints (with retry)
-    echo -e "${YELLOW}Waiting for HTTP endpoints to become available...${NC}"
+    update_dns_and_verify_services
+}
+
+# Update DNS records and verify service accessibility
+function update_dns_and_verify_services {
+    # Get manager node IP for DNS updates
+    MANAGER_IP=$(grep -A1 '\[instance1\]' static_ip.ini | tail -n1 | awk '{print $1}')
+    MANAGER_KEY=$(realpath "ssh_keys/instance1.pem")
     
-    # Update DNS first
-    echo -e "${YELLOW}Updating DNS records...${NC}"
-    ./duckdns-updater.sh
+    echo -e "${YELLOW}Updating DNS records with public IP...${NC}"
+    # Get the actual public IP from the EC2 instance
+    PUBLIC_IP=$(ssh -i $MANAGER_KEY ubuntu@$MANAGER_IP "curl -s https://api.ipify.org")
+    
+    # Source the environment for DuckDNS token
+    source .env
+    
+    # Define domains
+    DOMAINS=("cpplanta" "api.cpplanta" "pgadmin.cpplanta" "traefik.cpplanta" "viz.cpplanta")
+    
+    # Loop through domains and update with proper error handling
+    DNS_UPDATE_FAILED=0
+    for DOMAIN in "${DOMAINS[@]}"; do
+        echo -e "${YELLOW}Updating $DOMAIN.duckdns.org...${NC}"
+        UPDATE_RESULT=$(curl -s "https://www.duckdns.org/update?domains=$DOMAIN&token=$DUCKDNS_TOKEN&ip=$PUBLIC_IP")
+        
+        if [ "$UPDATE_RESULT" = "OK" ]; then
+            echo -e "${GREEN}Successfully updated $DOMAIN.duckdns.org to point to $PUBLIC_IP${NC}"
+        else
+            echo -e "${RED}Failed to update $DOMAIN.duckdns.org: $UPDATE_RESULT${NC}"
+            DNS_UPDATE_FAILED=1
+        fi
+    done
     
     # Wait for DNS propagation
-    echo -e "${YELLOW}Waiting for DNS propagation (30 seconds)...${NC}"
-    sleep 30
+    echo -e "${YELLOW}Waiting for DNS propagation (60 seconds)...${NC}"
+    sleep 60
     
-    # Test endpoints with retry
+    # Test HTTP endpoints
+    SERVICE_CHECK_FAILED=0
     for domain in cpplanta.duckdns.org api.cpplanta.duckdns.org pgadmin.cpplanta.duckdns.org; do
         echo -e "${YELLOW}Testing $domain...${NC}"
-        max_retries=5
+        max_retries=10
         retry_count=0
-        while ! curl -s -o /dev/null -w "%{http_code}" https://$domain; do
-            retry_count=$((retry_count+1))
-            if [[ $retry_count -ge $max_retries ]]; then
-                echo -e "${RED}Failed to connect to $domain after $max_retries attempts.${NC}"
+        status_code=""
+        
+        while [ $retry_count -lt $max_retries ]; do
+            status_code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 "https://$domain")
+            
+            if [[ "$status_code" =~ ^(200|301|302|307|308)$ ]]; then
+                echo -e "${GREEN}✓ $domain is accessible (HTTP $status_code)${NC}"
                 break
+            else
+                retry_count=$((retry_count+1))
+                if [ $retry_count -ge $max_retries ]; then
+                    echo -e "${RED}✗ Failed to connect to $domain after $max_retries attempts.${NC}"
+                    SERVICE_CHECK_FAILED=1
+                else
+                    echo -e "${YELLOW}Retrying in 15 seconds (attempt $retry_count/$max_retries)...${NC}"
+                    sleep 15
+                fi
             fi
-            echo -e "${YELLOW}Retrying in 10 seconds...${NC}"
-            sleep 10
         done
     done
     
-    echo -e "${GREEN}Deployment verification completed.${NC}"
+    if [ $DNS_UPDATE_FAILED -eq 1 ]; then
+        echo -e "${YELLOW}Warning: Some DNS updates failed, but continuing with deployment.${NC}"
+    fi
+    
+    if [ $SERVICE_CHECK_FAILED -eq 1 ]; then
+        echo -e "${YELLOW}Warning: Some services failed accessibility checks.${NC}"
+        echo -e "${YELLOW}This might be due to Let's Encrypt provisioning delay. Services may become available shortly.${NC}"
+    else
+        echo -e "${GREEN}All services are accessible!${NC}"
+    fi
 }
 
 

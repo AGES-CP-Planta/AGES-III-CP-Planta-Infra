@@ -133,7 +133,6 @@ The repository is organized as follows:
 ├── check-existing-resources.sh
 ├── deploy.sh
 ├── destroy.sh
-├── duckdns-updater.sh
 ├── prepare_configs.sh
 ├── save-terraform-state.sh
 ├── secrets-manager.sh
@@ -269,14 +268,9 @@ The project uses DuckDNS for DNS resolution:
    - `pgadmin.cpplanta.duckdns.org` (Database admin)
    - `viz.cpplanta.duckdns.org` (Visualizer dashboard)
 
-3. Set up automatic DNS updates:
+3. Set up automatic DNS updates via deploy post-steps while duckdns env is sourced.
 
-   ```bash
-   chmod +x duckdns-updater.sh
-   ./duckdns-updater.sh
-   ```
-
-4. The script will install a cron job to keep your DNS records updated if your server's IP changes.
+4. The post deploy phase on the deploy script will install a cron job to keep your DNS records updated if your server's IP changes.
 
 ### Internal DNS with CoreDNS
 
