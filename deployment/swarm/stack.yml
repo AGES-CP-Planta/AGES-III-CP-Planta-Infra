@@ -64,7 +64,6 @@ services:
       - NODE_HOST=${PRIMARY_HOST:-postgres_primary}
     volumes:
       - postgres_primary_data:/var/lib/postgresql/data
-      - ./repmgr.conf:/etc/repmgr.conf
     networks:
       - backend_network
     deploy:
@@ -108,7 +107,6 @@ services:
       - REPLICATE_FROM=${PRIMARY_HOST:-postgres_primary}
     volumes:
       - postgres_replica_data:/var/lib/postgresql/data
-      - ./repmgr.conf:/etc/repmgr.conf
     networks:
       - backend_network
     deploy:
@@ -143,9 +141,6 @@ services:
   # PgBouncer Connection Pooler
   pgbouncer:
     image: norohim/pgbouncer:latest
-    volumes:
-      - ./pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini
-      - ./userlist.txt:/etc/pgbouncer/userlist.txt
     networks:
       - backend_network
     deploy:

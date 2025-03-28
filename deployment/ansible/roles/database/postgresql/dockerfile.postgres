@@ -26,7 +26,7 @@ RUN mkdir -p /var/lib/postgresql/archive \
     && chown -R postgres:postgres /var/lib/postgresql /var/log/postgresql
 
 # Copy the custom entrypoint script and configuration files
-COPY ./docker_entrypoint.sh /usr/local/bin/
+COPY ./postgres-entrypoint.sh /usr/local/bin/
 COPY ./postgresql.conf /etc/postgresql/
 COPY ./pg_hba.conf /etc/postgresql/
 
@@ -34,18 +34,14 @@ COPY ./pg_hba.conf /etc/postgresql/
 COPY ./db_create.sql /docker-entrypoint-initdb.d/
 COPY ./db_insert.sql /docker-entrypoint-initdb.d/
 
-# Copy pgbouncer configuration
-COPY ./userlist.txt /etc/pgbouncer/userlist.txt
-COPY ./pgbouncer.ini /etc/pgbouncer/pgbouncer.ini
-
 # Ensure the entrypoint script is executable
-RUN chmod +x /usr/local/bin/docker_entrypoint.sh
+RUN chmod +x /usr/local/bin/postgres-entrypoint.sh
 
 # Expose PostgreSQL and replication ports
 EXPOSE 5432 5433
 
 # Use the custom entrypoint script
-ENTRYPOINT ["docker_entrypoint.sh"]
+ENTRYPOINT ["postgres-entrypoint.sh"]
 
 # Start PostgreSQL
 CMD ["postgres"]

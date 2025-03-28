@@ -22,6 +22,20 @@ exec 2>&1
 # Export environment variables for Ansible and Python
 export ANSIBLE_FORCE_COLOR=true
 export PYTHONIOENCODING=utf-8
+# Add for direct SSH commands in the script
+export ANSIBLE_HOST_KEY_CHECKING=False
+
+# Add this block to load environment variables globally:
+if [[ -f ".env" ]]; then
+    echo -e "${YELLOW}Loading environment variables from .env file...${NC}"
+    set -o allexport
+    source .env
+    set +o allexport
+else
+    echo -e "${YELLOW}Warning: .env file not found. Environment variables may need to be set manually.${NC}"
+fi
+
+SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
 echo "==========================================="
 echo "CP-Planta Deployment - $(date)"
@@ -74,7 +88,7 @@ function handle_error {
                 MANAGER_IP=$(grep -A1 '\[instance1\]' static_ip.ini | tail -n1 | awk '{print $1}')
                 if [[ -n "$MANAGER_IP" ]]; then
                     echo -e "${YELLOW}Connecting to manager node $MANAGER_IP...${NC}"
-                    ssh -i ssh_keys/instance1.pem ubuntu@$MANAGER_IP "docker stack rm CP-Planta"
+                    ssh $SSH_OPTS -i ssh_keys/instance1.pem ubuntu@$MANAGER_IP "docker stack rm CP-Planta"
                 fi
                 ;;
         esac
@@ -104,6 +118,11 @@ function validate_environment {
         fi
     elif [[ "$PROVIDER" == "azure" ]]; then
         echo -e "${YELLOW}Validating Azure credentials...${NC}"
+        # Using the Terraform prefix(TF_VAR) on var for Azure 
+        if [[ "$PROVIDER" == "azure" && -n "$AZURE_SUBSCRIPTION_ID" ]]; then
+            export TF_VAR_azure_subscription_id="$AZURE_SUBSCRIPTION_ID"
+        fi
+        
         if ! az account show &> /dev/null; then
             handle_error "Invalid Azure credentials" "pre-deployment"
         fi
@@ -199,10 +218,10 @@ function verify_deployment {
     fi
     
     echo -e "${YELLOW}Checking Docker Swarm status...${NC}"
-    ssh -i $MANAGER_KEY ubuntu@$MANAGER_IP "docker node ls" || handle_error "Docker Swarm status check failed" "verification"
+    ssh $SSH_OPTS -i $MANAGER_KEY ubuntu@$MANAGER_IP "docker node ls" || handle_error "Docker Swarm status check failed" "verification"
     
     echo -e "${YELLOW}Checking Docker services status...${NC}"
-    ssh -i $MANAGER_KEY ubuntu@$MANAGER_IP "docker service ls" || handle_error "Docker services status check failed" "verification"
+    ssh $SSH_OPTS -i $MANAGER_KEY ubuntu@$MANAGER_IP "docker service ls" || handle_error "Docker services status check failed" "verification"
     
     update_dns_and_verify_services
 }
@@ -215,7 +234,7 @@ function update_dns_and_verify_services {
     
     echo -e "${YELLOW}Updating DNS records with public IP...${NC}"
     # Get the actual public IP from the EC2 instance
-    PUBLIC_IP=$(ssh -i $MANAGER_KEY ubuntu@$MANAGER_IP "curl -s https://api.ipify.org")
+    PUBLIC_IP="$(ssh $SSH_OPTS -i $MANAGER_KEY ubuntu@$MANAGER_IP "curl -s https://api.ipify.org")"
     
     # Source the environment for DuckDNS token
     source .env
@@ -227,7 +246,7 @@ function update_dns_and_verify_services {
     DNS_UPDATE_FAILED=0
     for DOMAIN in "${DOMAINS[@]}"; do
         echo -e "${YELLOW}Updating $DOMAIN.duckdns.org...${NC}"
-        UPDATE_RESULT=$(curl -s "https://www.duckdns.org/update?domains=$DOMAIN&token=$DUCKDNS_TOKEN&ip=$PUBLIC_IP")
+        UPDATE_RESULT="$(curl -s https://www.duckdns.org/update?domains=$DOMAIN&token=$DUCKDNS_TOKEN&ip=$PUBLIC_IP)"
         
         if [ "$UPDATE_RESULT" = "OK" ]; then
             echo -e "${GREEN}Successfully updated $DOMAIN.duckdns.org to point to $PUBLIC_IP${NC}"
@@ -320,6 +339,7 @@ else
 fi
 
 run_ansible
+
 verify_deployment
 
 # Save successful deployment marker
