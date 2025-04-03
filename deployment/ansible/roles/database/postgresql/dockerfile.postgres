@@ -11,7 +11,6 @@ ENV POSTGRES_DB=postgres
 # Install required tools
 RUN apk update && apk add --no-cache \
     repmgr \
-    pgbouncer \
     sudo \
     bash \
     curl \
