@@ -182,12 +182,52 @@
       dest: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
     delegate_to: "{{ manager_node }}"
     run_once: true
+    
+  - name: Copy reverse zone file to manager
+    copy:
+      src: ../roles/networking/zones/1.0.10.in-addr.arpa.db
+      dest: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
+    delegate_to: "{{ manager_node }}"
+    run_once: true
 
   - name: Update zone file with manager IP
     replace:
       path: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
       regexp: '10\.0\.1\.10'
       replace: "{{ manager_node }}"  # Using manager_node directly as the IP
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Update reverse zone file with worker IP
+    replace:
+      path: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
+      regexp: '10\.0\.1\.20'
+      replace: "{{ manager_node }}"  # Using manager_node directly as the IP
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  # Parse IP addresses for reverse DNS
+  - name: Extract IP octets for reverse DNS
+    set_fact:
+      manager_ip_octets: "{{ groups['instance1'][0].split('.') }}"
+      worker_ip_octets: "{{ groups['instance2'][0].split('.') }}"
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  # Update reverse zone file
+  - name: Update reverse zone file domain
+    replace:
+      path: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
+      regexp: '1\.0\.10\.in-addr\.arpa'
+      replace: "{{ manager_ip_octets[2] }}.{{ manager_ip_octets[1] }}.{{ manager_ip_octets[0] }}.in-addr.arpa"
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Update manager node PTR record
+    replace:
+      path: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
+      regexp: '10\s+IN\s+PTR\s+ns1\.cpplanta\.duckdns\.org\.'
+      replace: "{{ manager_ip_octets[3] }} IN PTR ns1.cpplanta.duckdns.org."
     delegate_to: "{{ manager_node }}"
     run_once: true
 
@@ -201,7 +241,7 @@
 
   - name: Wait for 45 seconds to show proper service status
     wait_for:
-      timeout: 45
+      timeout: 35
 
   - name: Show service status
     command: docker service ls

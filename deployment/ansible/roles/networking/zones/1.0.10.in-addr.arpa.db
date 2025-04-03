@@ -1,0 +1,15 @@
+$ORIGIN 1.0.10.in-addr.arpa.
+$TTL 3600
+@       IN      SOA     ns1.cpplanta.duckdns.org. admin.cpplanta.duckdns.org. (
+                        2025040301      ; serial
+                        3600            ; refresh
+                        1800            ; retry
+                        604800          ; expire
+                        86400           ; minimum
+)
+                IN      NS      ns1.cpplanta.duckdns.org.
+
+; Add PTR records for your internal network
+10      IN      PTR     manager.cpplanta.duckdns.org.  ; Manager node (10.0.1.10)
+20      IN      PTR     worker.cpplanta.duckdns.org.   ; Worker node (10.0.1.20)
+; Add more records as needed for other machines

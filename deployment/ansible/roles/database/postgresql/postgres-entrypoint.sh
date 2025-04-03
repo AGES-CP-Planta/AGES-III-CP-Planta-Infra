@@ -138,4 +138,4 @@ fi
 
 # Switch to postgres user and start PostgreSQL
 echo "Starting PostgreSQL server..."
-exec su postgres -c "postgres -D $PGDATA"
+exec su-exec postgres postgres -D $PGDATA

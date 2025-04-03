@@ -1,7 +1,7 @@
 $ORIGIN cpplanta.duckdns.org.
 $TTL 3600
 @       IN      SOA     ns1.cpplanta.duckdns.org. admin.cpplanta.duckdns.org. (
-                        2023031501      ; serial (increment this)
+                        2025040301      ; serial (updated)
                         3600            ; refresh
                         1800            ; retry
                         604800          ; expire
@@ -18,7 +18,11 @@ viz             IN      CNAME   @
 traefik         IN      CNAME   @
 
 ; Internal service discovery
-postgres        IN      A       10.0.1.10
-backend         IN      A       10.0.1.10
-frontend        IN      A       10.0.1.10
-visualizer      IN      A       10.0.1.10
+postgres_primary    IN      A       10.0.1.10  ; Primary PostgreSQL node
+postgres_replica    IN      A       10.0.1.20  ; Replica PostgreSQL node (worker node)
+postgres            IN      CNAME   postgres_primary  ; Default points to primary
+pgbouncer           IN      A       10.0.1.10  ; Connection pooler
+backend             IN      A       10.0.1.10  ; Backend service
+frontend            IN      A       10.0.1.20  ; Frontend service
+visualizer          IN      A       10.0.1.10  ; Docker Swarm visualizer
+dns                 IN      A       10.0.1.10  ; CoreDNS service itself

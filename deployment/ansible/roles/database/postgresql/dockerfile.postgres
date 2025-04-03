@@ -18,7 +18,8 @@ RUN apk update && apk add --no-cache \
     openssl \
     ca-certificates \
     gettext \
-    postgresql-client
+    postgresql-client \
+    su-exec
 
 # Create necessary directories
 RUN mkdir -p /var/lib/postgresql/archive \
