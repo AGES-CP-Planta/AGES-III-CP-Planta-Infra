@@ -166,8 +166,8 @@ function run_terraform {
     cd ../..
     echo -e "${GREEN}Terraform execution completed successfully.${NC}"
     
-    echo -e "${YELLOW}Waiting for instances to initialize (60 seconds)...${NC}"
-    for i in {1..60}; do
+    echo -e "${YELLOW}Waiting for instances to initialize (30 seconds)...${NC}"
+    for i in {1..30}; do
         echo -n "."
         sleep 1
         if (( i % 10 == 0 )); then
@@ -258,13 +258,13 @@ function update_dns_and_verify_services {
     
     # Wait for DNS propagation
     echo -e "${YELLOW}Waiting for DNS propagation (60 seconds)...${NC}"
-    sleep 60
+    sleep 30
     
     # Test HTTP endpoints
     SERVICE_CHECK_FAILED=0
     for domain in cpplanta.duckdns.org api.cpplanta.duckdns.org pgadmin.cpplanta.duckdns.org; do
         echo -e "${YELLOW}Testing $domain...${NC}"
-        max_retries=10
+        max_retries=3
         retry_count=0
         status_code=""
         
@@ -281,7 +281,7 @@ function update_dns_and_verify_services {
                     SERVICE_CHECK_FAILED=1
                 else
                     echo -e "${YELLOW}Retrying in 15 seconds (attempt $retry_count/$max_retries)...${NC}"
-                    sleep 15
+                    sleep 5
                 fi
             fi
         done
