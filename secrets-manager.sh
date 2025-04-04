@@ -140,7 +140,6 @@ function create_template {
     fi
 
     cat > "$SECRETS_TEMPLATE_FILE" << 'EOL'
-
 # Azure Provider Credentials
 AZURE_SUBSCRIPTION_ID=your_azure_subscription_id # must have access to the Azure
 
@@ -148,8 +147,8 @@ AZURE_SUBSCRIPTION_ID=your_azure_subscription_id # must have access to the Azure
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
 POSTGRES_DB=postgres
-PRIMARY_HOST=tasks.postgres_primary
-REPLICA_HOST=tasks.postgres_replica
+PRIMARY_HOST=postgres_primary
+REPLICA_HOST=postgres_replica
 
 # PgAdmin Configuration
 PGADMIN_DEFAULT_EMAIL=your_pgadmin_email@example.com
