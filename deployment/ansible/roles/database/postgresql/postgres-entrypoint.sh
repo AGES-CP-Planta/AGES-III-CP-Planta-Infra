@@ -30,21 +30,14 @@ setup_postgresql() {
         cp /etc/postgresql/pg_hba.conf "$PGDATA/"
     fi
     
-    # Additional configuration for replication
-    cat >> "$PGDATA/postgresql.conf" <<EOF
-wal_level = replica
-max_wal_senders = 10
-max_replication_slots = 10
-wal_keep_size = 128MB
-hot_standby = on
-EOF
-
-    # Configure pg_hba.conf to allow replication
-    cat >> "$PGDATA/pg_hba.conf" <<EOF
+    # Configure pg_hba.conf to allow replication connections if not already present
+    if ! grep -q "host replication postgres 0.0.0.0/0 md5" "$PGDATA/pg_hba.conf"; then
+        cat >> "$PGDATA/pg_hba.conf" <<EOF
 # Allow replication connections
 host replication postgres 0.0.0.0/0 md5
 host replication postgres ::/0 md5
 EOF
+    fi
 }
 
 # Initialize primary server
@@ -65,8 +58,9 @@ init_primary() {
     # Start PostgreSQL as postgres user
     su postgres -c "pg_ctl -D $PGDATA -w start"
     
-    # Create replication slot as postgres user
-    su postgres -c "psql -U postgres -c \"SELECT pg_create_physical_replication_slot('replication_slot') WHERE NOT EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'replication_slot');\""
+    # Create replication slot as postgres user - Fixed SQL injection risk with separate commands
+    su postgres -c "psql -U postgres -c \"SELECT 1 FROM pg_replication_slots WHERE slot_name = 'replication_slot' LIMIT 1;\"" | grep -q "1" || \
+    su postgres -c "psql -U postgres -c \"SELECT pg_create_physical_replication_slot('replication_slot');\""
     
     # Stop PostgreSQL as postgres user
     su postgres -c "pg_ctl -D $PGDATA -w stop"

@@ -25,7 +25,7 @@ function show_help {
     echo -e "${YELLOW}Actions:${NC}"
     echo -e "  encrypt       Encrypt the .env file (requires -p/--password)"
     echo -e "  decrypt       Decrypt the .env.encrypted file (requires -p/--password)"
-    echo -e "  template      Create a template .env file (will not overwrite existing one)"
+    echo -e "  template  template    Create a template .env file (will not overwrite existing one)"
     echo -e "  check         Check if all required secrets are present in the .env file"
     echo -e "  help          Show this help message"
     echo ""
@@ -148,8 +148,8 @@ AZURE_SUBSCRIPTION_ID=your_azure_subscription_id # must have access to the Azure
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
 POSTGRES_DB=postgres
-PRIMARY_HOST=postgres_primary
-REPLICA_HOST=postgres_replica
+PRIMARY_HOST=tasks.postgres_primary
+REPLICA_HOST=tasks.postgres_replica
 
 # PgAdmin Configuration
 PGADMIN_DEFAULT_EMAIL=your_pgadmin_email@example.com
