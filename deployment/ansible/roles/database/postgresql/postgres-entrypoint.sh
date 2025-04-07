@@ -58,9 +58,8 @@ init_primary() {
     # Start PostgreSQL as postgres user
     su postgres -c "pg_ctl -D $PGDATA -w start"
     
-    # Create replication slot as postgres user - Fixed SQL injection risk with separate commands
-    su postgres -c "psql -U postgres -c \"SELECT 1 FROM pg_replication_slots WHERE slot_name = 'replication_slot' LIMIT 1;\"" | grep -q "1" || \
-    su postgres -c "psql -U postgres -c \"SELECT pg_create_physical_replication_slot('replication_slot');\""
+    # Create replication slot as postgres user - simplified approach
+    su postgres -c "psql -U postgres -c \"SELECT pg_create_physical_replication_slot('replication_slot', true, false);\" 2>/dev/null || true"
     
     # Stop PostgreSQL as postgres user
     su postgres -c "pg_ctl -D $PGDATA -w stop"
@@ -72,6 +71,16 @@ init_replica() {
     
     # Remove data directory if it exists
     rm -rf "$PGDATA"/*
+
+    # Wait for primary to be ready for replication
+    echo "Waiting for primary to be fully initialized..."
+    sleep 30  
+
+    # Then verify primary is ready for replication connections
+    until su postgres -c "psql -h $REPLICATE_FROM -U postgres -c 'SELECT pg_is_in_recovery();'"; do
+        echo "Waiting for primary to accept connections..."
+        sleep 5
+    done
     
     # Try to connect to primary and perform base backup
     # Run pg_basebackup as postgres user
@@ -82,7 +91,7 @@ init_replica() {
     
     # Create recovery configuration
     cat > "$PGDATA/postgresql.auto.conf" <<EOF
-primary_conninfo = 'host=$REPLICATE_FROM port=5432 user=postgres password=$POSTGRES_PASSWORD application_name=$NODE_NAME'
+primary_conninfo = 'host=$REPLICATE_FROM port=5432 user=postgres password=''$POSTGRES_PASSWORD'' application_name=$NODE_NAME'
 primary_slot_name = 'replication_slot'
 hot_standby = on
 EOF
@@ -127,12 +136,6 @@ if [[ -f /etc/repmgr.conf ]]; then
     cp /etc/repmgr.conf /var/lib/postgresql/repmgr.conf
     replace_env_vars /var/lib/postgresql/repmgr.conf
     chown postgres:postgres /var/lib/postgresql/repmgr.conf
-fi
-
-# Start pgbouncer in the background (if configured)
-if [[ -f /etc/pgbouncer/pgbouncer.ini ]]; then
-    echo "Starting pgbouncer..."
-    pgbouncer -u postgres /etc/pgbouncer/pgbouncer.ini &
 fi
 
 # Start PostgreSQL as postgres user

@@ -176,7 +176,7 @@
     delegate_to: "{{ manager_node }}"
     run_once: true
 
-  - name: Copy zone file to manager
+  - name: Copy forward zone file to manager
     copy:
       src: ../roles/networking/zones/cpplanta.duckdns.org.db
       dest: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
@@ -190,19 +190,19 @@
     delegate_to: "{{ manager_node }}"
     run_once: true
 
-  - name: Update zone file with manager IP
+  - name: Update forward zone file with manager IP
     replace:
       path: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
       regexp: '10\.0\.1\.10'
-      replace: "{{ manager_node }}"  # Using manager_node directly as the IP
+      replace: "{{ manager_node }}"  # Manager node IP
     delegate_to: "{{ manager_node }}"
     run_once: true
 
-  - name: Update reverse zone file with worker IP
+  - name: Update forward zone file with worker IP
     replace:
       path: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
       regexp: '10\.0\.1\.20'
-      replace: "{{ manager_node }}"  # Using manager_node directly as the IP
+      replace: "{{ first_worker }}"  # Worker node IP
     delegate_to: "{{ manager_node }}"
     run_once: true
 
@@ -214,8 +214,7 @@
     delegate_to: "{{ manager_node }}"
     run_once: true
 
-  # Update reverse zone file
-  - name: Update reverse zone file domain
+  - name: Update reverse zone file origin
     replace:
       path: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
       regexp: '1\.0\.10\.in-addr\.arpa'
@@ -223,15 +222,23 @@
     delegate_to: "{{ manager_node }}"
     run_once: true
 
-  - name: Update manager node PTR record
+  - name: Update reverse zone manager IP
     replace:
       path: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
-      regexp: '10\s+IN\s+PTR\s+ns1\.cpplanta\.duckdns\.org\.'
-      replace: "{{ manager_ip_octets[3] }} IN PTR ns1.cpplanta.duckdns.org."
+      regexp: '10\s+IN\s+PTR'
+      replace: "{{ manager_ip_octets[3] }} IN PTR"
     delegate_to: "{{ manager_node }}"
     run_once: true
 
-  # Deploy the stack with better resource allocation
+  - name: Update reverse zone worker IP
+    replace:
+      path: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
+      regexp: '20\s+IN\s+PTR'
+      replace: "{{ worker_ip_octets[3] }} IN PTR"
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  # Deploy the stack
   - name: Deploy the stack on manager
     shell: docker stack deploy --with-registry-auth --resolve-image always -c /home/{{ ansible_ssh_user }}/stack.yml CP-Planta
     args:
