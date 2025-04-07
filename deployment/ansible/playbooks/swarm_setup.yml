@@ -165,10 +165,22 @@
     delegate_to: "{{ manager_node }}"
     run_once: true 
 
+  - name: Get manager node IP
+    shell: hostname -I | awk '{print $1}'
+    register: manager_ip_result
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Get worker node IP
+    shell: hostname -I | awk '{print $1}'
+    register: worker_ip_result
+    delegate_to: "{{ first_worker }}"
+    run_once: true
+
   - name: Get manager and worker IPs for stack
     set_fact:
-      manager_ip_value: "{{ manager_ip.stdout }}"
-      worker_ip_value: "{{ worker_ip.stdout }}"
+      manager_ip_value: "{{ manager_ip_result.stdout }}"
+      worker_ip_value: "{{ worker_ip_result.stdout }}"
     delegate_to: "{{ manager_node }}"
     run_once: true
 
@@ -179,11 +191,13 @@
     delegate_to: "{{ manager_node }}"
     run_once: true
 
-  # Deploy the stack
-  - name: Deploy the stack on manager
-    shell: docker stack deploy --with-registry-auth -c /home/{{ ansible_ssh_user }}/stack.yml CP-Planta
-    args:
-      chdir: /home/{{ ansible_ssh_user }}
+  - name: Process stack.yml template with environment variables
+    template:
+      src: ../../swarm/stack.yml.j2
+      dest: /home/{{ ansible_ssh_user }}/stack.yml
+    vars:
+      manager_ip: "{{ manager_ip_value }}"
+      worker_ip: "{{ worker_ip_value }}"
     delegate_to: "{{ manager_node }}"
     run_once: true
 

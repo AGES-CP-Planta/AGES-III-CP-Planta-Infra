@@ -55,12 +55,10 @@ services:
     image: norohim/coredns:latest
     environment:
       - TZ=${TZ:-America/Sao_Paulo}
-      - MANAGER_IP=${MANAGER_IP:-10.0.1.10}
-      - WORKER_IP=${WORKER_IP:-10.0.1.20}
+      - MANAGER_IP={{ manager_ip }}
+      - WORKER_IP={{ worker_ip }}
       - DOMAIN_NAME=${DOMAIN_NAME:-cpplanta.duckdns.org}
     command: -conf /etc/coredns/Corefile
-    volumes:
-      - ./dns/Corefile:/etc/coredns/Corefile
     networks:
       - backend_network
       - frontend_network
