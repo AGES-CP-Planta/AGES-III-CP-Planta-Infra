@@ -116,8 +116,7 @@ The repository is organized as follows:
 │   ├── kubernetes/
 │   │   └── manifests/
 │   └── swarm/
-│       ├── replication_setup.sh
-│       └── stack.yml
+│       └── stack.ym.j2
 ├── docs/
 │   ├── ENHANCEMENTS.md
 │   └── single-region-diagram.svg
