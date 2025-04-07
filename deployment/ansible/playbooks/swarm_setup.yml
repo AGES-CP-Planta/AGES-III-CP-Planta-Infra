@@ -201,6 +201,13 @@
     delegate_to: "{{ manager_node }}"
     run_once: true
 
+  - name: Deploy the stack on manager
+    shell: docker stack deploy --with-registry-auth -c /home/{{ ansible_ssh_user }}/stack.yml CP-Planta
+    args:
+      chdir: /home/{{ ansible_ssh_user }}
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
   - name: Wait for services to start up
     pause:
       seconds: 60
