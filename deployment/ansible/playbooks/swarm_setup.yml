@@ -230,6 +230,10 @@
     register: worker_ip
     delegate_to: "{{ first_worker }}"
     run_once: true
+    become: yes 
+    become_method: sudo
+    become_flags: -H
+    changed_when: false
 
   - name: Update Corefile with actual IP addresses
     replace:
@@ -247,7 +251,7 @@
     delegate_to: "{{ manager_node }}"
     run_once: true
 
-  # Create a healthcheck script on manager node
+  # Create a healthcheck script on manager node - with proper escaping
   - name: Create healthcheck script on manager
     copy:
       dest: /home/{{ ansible_ssh_user }}/healthcheck.sh
@@ -257,7 +261,7 @@
         
         check_service() {
           local service=$1
-          local status=$(docker service ls --format '{{.Name}} {{.Replicas}}' | grep $service)
+          local status=$(docker service ls --format {% raw %}'{{.Name}} {{.Replicas}}'{% endraw %} | grep $service)
           if [[ "$status" == *"0/1"* ]]; then
             echo "$service is not running correctly"
             return 1

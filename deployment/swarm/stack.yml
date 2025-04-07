@@ -87,12 +87,14 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
+      - ROLE=primary
+      - PGDATA=/var/lib/postgresql/data
     volumes:
       - postgres_primary_data:/var/lib/postgresql/data
-      - ./database/postgresql/pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf
+      - /var/lib/postgresql/data/custom-entrypoint.sh:/docker-entrypoint.sh
+    command: ["/docker-entrypoint.sh"]
     networks:
       - backend_network
-    command: postgres -c "listen_addresses=*" -c "max_connections=200" -c "wal_level=replica"
     deploy:
       replicas: 1
       placement:
@@ -127,12 +129,14 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
+      - ROLE=replica
+      - REPLICATE_FROM=postgres_primary
     volumes:
       - postgres_replica_data:/var/lib/postgresql/data
     networks:
       - backend_network
     deploy:
-      replicas: 0
+      replicas: 1
       placement:
         constraints:
           - node.role == worker
@@ -153,7 +157,7 @@ services:
 
   # PgBouncer Connection Pooler
   pgbouncer:
-    image: edoburu/pgbouncer:latest
+    image: norohim/pgbouncer:latest
     environment:
       - DB_USER=${POSTGRES_USER:-postgres}
       - DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
@@ -236,7 +240,7 @@ services:
       - postgres_primary
         
   pgadmin:
-    image: dpage/pgadmin4:latest
+    image: norohim/pgadmin:latest
     environment:
       - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
       - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD:-admin}

@@ -26,13 +26,13 @@ RUN mkdir -p /var/lib/postgresql/archive \
     && chown -R postgres:postgres /var/lib/postgresql /var/log/postgresql
 
 # Copy the custom entrypoint script and configuration files
-COPY ./postgresql/postgres-entrypoint.sh /usr/local/bin/
-COPY ./postgresql/postgresql.conf /etc/postgresql/
-COPY ./postgresql/pg_hba.conf /etc/postgresql/
+COPY ./postgres-entrypoint.sh /usr/local/bin/
+COPY ./postgresql.conf /etc/postgresql/
+COPY ./pg_hba.conf /etc/postgresql/
 
 # Copy SQL scripts for initialization (only used on the primary)
-COPY ./postgresql/db_create.sql /docker-entrypoint-initdb.d/
-COPY ./postgresql/db_insert.sql /docker-entrypoint-initdb.d/
+COPY ./db_create.sql /docker-entrypoint-initdb.d/
+COPY ./db_insert.sql /docker-entrypoint-initdb.d/
 
 # Expose PostgreSQL and replication ports
 EXPOSE 5432 5433

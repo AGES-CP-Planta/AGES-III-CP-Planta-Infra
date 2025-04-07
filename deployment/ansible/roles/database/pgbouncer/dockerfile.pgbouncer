@@ -1,6 +1,6 @@
 FROM edoburu/pgbouncer:latest
 
-COPY pgbouncer/pgbouncer.ini /etc/pgbouncer/pgbouncer.ini
-COPY pgbouncer/userlist.txt /etc/pgbouncer/userlist.txt
+COPY pgbouncer.ini /etc/pgbouncer/pgbouncer.ini
+COPY userlist.txt /etc/pgbouncer/userlist.txt
 
 EXPOSE 6432
