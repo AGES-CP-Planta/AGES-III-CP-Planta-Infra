@@ -87,7 +87,13 @@ services:
     ports:
       - "${POSTGRES_PRIMARY_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      test: [
+        "CMD-SHELL", 
+        "pg_isready -U postgres && \
+        psql -U postgres -c \"SELECT 1 FROM pg_replication_slots WHERE slot_name = 'replication_slot';\" | grep -q 1 || \
+        psql -U postgres -c \"SELECT pg_create_physical_replication_slot('replication_slot', true);\" && \
+        psql -U postgres -c \"SHOW wal_level\" | grep -q \"replica\""
+      ]      
       interval: 10s
       timeout: 5s
       retries: 5
@@ -107,6 +113,7 @@ services:
       - REPLICATE_FROM=${PRIMARY_HOST:-postgres_primary}
     volumes:
       - postgres_replica_data:/var/lib/postgresql/data
+      - ./dns_wait.sh:/usr/local/bin/dns_wait.sh
     networks:
       - backend_network
     deploy:
@@ -127,17 +134,22 @@ services:
         max_attempts: 5
       labels:
         - "traefik.enable=false"
-    entrypoint: ["/bin/sh", "-c", "sleep 60 && postgres-entrypoint.sh"]  # Wait for primary to be fully ready
+    entrypoint: ["/bin/sh", "-c", "chmod +x /usr/local/bin/dns_wait.sh && /usr/local/bin/dns_wait.sh && sleep 30 && postgres-entrypoint.sh"]
     ports:
       - "${POSTGRES_REPLICA_PORT:-5433}:5432"
     depends_on:
       - postgres_primary
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+    test: [
+      "CMD-SHELL", 
+      "pg_isready -U postgres && \
+      psql -U postgres -c \"SELECT pg_is_in_recovery();\" | grep -q t && \
+      psql -U postgres -c \"SELECT state FROM pg_stat_wal_receiver;\" | grep -q \"streaming\""
+    ]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+    start_period: 60s  # Longer start period to allow replication setup
 
   # PgBouncer Connection Pooler
   pgbouncer:
@@ -167,27 +179,35 @@ services:
       - postgres_primary
       - postgres_replica
     healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 6432"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+    test: [
+      "CMD-SHELL",
+      "echo \"SHOW POOLS;\" | psql -h 127.0.0.1 -p 6432 -U postgres pgbouncer | grep -q postgres"
+    ]
+    interval: 10s
+    timeout: 5s
+    retries: 3
+    start_period: 30s
 
   backend:
     image: norohim/cp-planta-backend:latest
     environment:
-      - NODE_ENV=production
-      # Change to use pgbouncer instead of direct database connection
-      - DB_HOST=pgbouncer
-      - DB_PORT=6432
-      - DB_USER=${POSTGRES_USER:-postgres}
-      - DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - DB_NAME=${POSTGRES_DB:-postgres}
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-postgres}
-      # Additional environment variables for Prisma
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+    - NODE_ENV=production
+    # Main database connection (read-write)
+    - DB_HOST=pgbouncer
+    - DB_PORT=6432
+    - DB_USER=${POSTGRES_USER:-postgres}
+    - DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    - DB_NAME=${POSTGRES_DB:-postgres}
+    - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-postgres}
+    # Read-only database connection
+    - DB_RO_HOST=pgbouncer
+    - DB_RO_PORT=6432
+    - DB_RO_USER=${POSTGRES_USER:-postgres}
+    - DB_RO_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+    - DB_RO_NAME=postgres_ro
+    - DATABASE_RO_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/postgres_ro
+    volumes:
+      - ./dns_wait.sh:/usr/local/bin/dns_wait.sh
     networks:
       - backend_network
       - traefik_network
@@ -221,7 +241,7 @@ services:
         - "traefik.http.routers.backend.entrypoints=websecure"
         - "traefik.http.routers.backend.tls.certresolver=myresolver"
         - "traefik.http.services.backend.loadbalancer.server.port=${BACKEND_PORT:-3000}"
-    entrypoint: ["/bin/sh", "-c", "sleep 30 && node /app/dist/main.js"] # Wait for database to initialize
+    entrypoint: ["/bin/sh", "-c", "chmod +x /usr/local/bin/dns_wait.sh && /usr/local/bin/dns_wait.sh && node /app/dist/main.js"]
     ports:
       - "${BACKEND_PORT:-3000}:${BACKEND_PORT:-3000}"
     healthcheck:
