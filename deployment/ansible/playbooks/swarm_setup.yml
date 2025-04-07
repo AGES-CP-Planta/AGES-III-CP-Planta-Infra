@@ -157,15 +157,6 @@
     when: inventory_hostname != manager_node
     ignore_errors: yes
 
-  # Create necessary directories on manager
-  - name: Create DNS directory structure on manager
-    file:
-      path: /home/{{ ansible_ssh_user }}/dns/zones
-      state: directory
-      mode: '0755'
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-
   # Copy configuration files
   - name: Copy stack.yml to manager
     copy:
@@ -174,117 +165,17 @@
     delegate_to: "{{ manager_node }}"
     run_once: true 
 
-  - name: Copy Corefile to manager
-    copy:
-      src: ../roles/networking/Corefile
-      dest: /home/{{ ansible_ssh_user }}/dns/Corefile
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-
-  - name: Copy forward dns file to manager
-    copy:
-      src: ../roles/networking/zones/cpplanta.duckdns.org.db
-      dest: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-
-  - name: Copy reverse dns file to manager
-    copy:
-      src: ../roles/networking/zones/1.0.10.in-addr.arpa.db
-      dest: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-
-  # Update IP addresses in configuration files
-  - name: Get manager node IP address
-    shell: hostname -I | awk '{print $1}'
-    register: manager_ip
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-
-  - name: Get worker node IP address
-    shell: hostname -I | awk '{print $1}'
-    register: worker_ip
-    delegate_to: "{{ first_worker }}"
-    run_once: true
-    become: yes 
-    become_method: sudo
-    become_flags: -H
-    changed_when: false
-
-  - name: Update Corefile with actual IP addresses
-    replace:
-      path: /home/{{ ansible_ssh_user }}/dns/Corefile
-      regexp: '10\.0\.1\.10'
-      replace: "{{ manager_ip.stdout }}"
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-
-  - name: Update Corefile with actual worker IP address
-    replace:
-      path: /home/{{ ansible_ssh_user }}/dns/Corefile
-      regexp: '10\.0\.1\.20'
-      replace: "{{ worker_ip.stdout }}"
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-
-  - name: Update forward DNS file with actual manager IP address
-    replace:
-      path: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
-      regexp: '10\.0\.1\.10'
-      replace: "{{ manager_ip.stdout }}"
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-
-  - name: Update forward DNS file with actual worker IP address
-    replace:
-      path: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
-      regexp: '10\.0\.1\.20'
-      replace: "{{ worker_ip.stdout }}"
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-
-  - name: Update reverse DNS file with actual manager IP
-    replace:
-      path: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
-      regexp: '10\.0\.1\.10'
-      replace: "{{ manager_ip.stdout }}"
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-
-  - name: Update reverse DNS file with actual worker IP
-    replace:
-      path: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
-      regexp: '10\.0\.1\.20'
-      replace: "{{ worker_ip.stdout }}"
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-
-  - name: Extract last octet of manager IP for reverse DNS
+  - name: Get manager and worker IPs for stack
     set_fact:
-      manager_last_octet: "{{ manager_ip.stdout.split('.')[-1] }}"
+      manager_ip_value: "{{ manager_ip.stdout }}"
+      worker_ip_value: "{{ worker_ip.stdout }}"
     delegate_to: "{{ manager_node }}"
     run_once: true
 
-  - name: Extract last octet of worker IP for reverse DNS
-    set_fact:
-      worker_last_octet: "{{ worker_ip.stdout.split('.')[-1] }}"
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-
-  - name: Update reverse DNS records with correct octets
-    replace:
-      path: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
-      regexp: '^10\s+IN\s+PTR'
-      replace: "{{ manager_last_octet }} IN PTR"
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-
-  - name: Update reverse DNS records with correct octets for worker
-    replace:
-      path: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
-      regexp: '^20\s+IN\s+PTR'
-      replace: "{{ worker_last_octet }} IN PTR"
+  - name: Create .env file for stack deployment
+    template:
+      src: stack.env.j2
+      dest: /home/{{ ansible_ssh_user }}/.env
     delegate_to: "{{ manager_node }}"
     run_once: true
 
