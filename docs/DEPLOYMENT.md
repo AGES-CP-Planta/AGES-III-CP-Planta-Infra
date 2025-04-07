@@ -96,7 +96,6 @@ The repository is organized as follows:
 │   │   ├── playbooks/
 │   │   │   ├── ansible.cfg
 │   │   │   ├── swarm_setup.yml
-│   │   │   └── update-swarm-setup.sh
 │   │   └── roles/
 │   │       ├── database/
 │   │       │   ├── pgbouncer/

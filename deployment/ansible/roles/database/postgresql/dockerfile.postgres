@@ -34,12 +34,6 @@ COPY ./postgresql/pg_hba.conf /etc/postgresql/
 COPY ./postgresql/db_create.sql /docker-entrypoint-initdb.d/
 COPY ./postgresql/db_insert.sql /docker-entrypoint-initdb.d/
 
-# Copy DNS resolver script
-COPY ./dns_wait.sh /usr/local/bin/dns_wait.sh
-
-# Ensure the entrypoint script is executable
-RUN chmod +x /usr/local/bin/postgres-entrypoint.sh
-
 # Expose PostgreSQL and replication ports
 EXPOSE 5432 5433
 

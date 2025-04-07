@@ -1,26 +1,54 @@
 .:53 {
+    # Forward all queries not matching other zones to standard resolvers
     forward . 8.8.8.8 8.8.4.4
-    log
+    # Enable basic error logging
     errors
+    # Enable caching to improve performance
     cache 30
+    # Allow reloading without restart
     reload
 }
 
+# Zone for internal service discovery
 cpplanta.duckdns.org:53 {
-    file /etc/coredns/zones/cpplanta.duckdns.org.db
+    # Simple hosts file approach instead of complex zone file
+    hosts {
+        # Manager node services
+        10.0.1.10 postgres_primary
+        10.0.1.10 pgbouncer
+        10.0.1.10 backend
+        10.0.1.10 traefik
+        10.0.1.10 dns
+        
+        # Worker node services
+        10.0.1.20 postgres_replica
+        10.0.1.20 frontend
+        10.0.1.20 pgadmin
+        
+        # Basic hostnames
+        10.0.1.10 manager.cpplanta.duckdns.org
+        10.0.1.20 worker.cpplanta.duckdns.org
+        
+        # Public service domains
+        10.0.1.10 cpplanta.duckdns.org
+        10.0.1.10 api.cpplanta.duckdns.org
+        10.0.1.10 traefik.cpplanta.duckdns.org
+        10.0.1.20 pgadmin.cpplanta.duckdns.org
+        10.0.1.10 viz.cpplanta.duckdns.org
+        
+        # Fallback to localhost
+        127.0.0.1 localhost localhost.localdomain
+    }
+    
+    # Fall back to external DNS for subdomains not defined above
     forward . 8.8.8.8 8.8.4.4 {
         except cpplanta.duckdns.org
     }
-    log
+    
+    # Basic error logging
     errors
+    # Enable caching
     cache 30
-    reload
-}
-
-1.0.10.in-addr.arpa:53 {
-    file /etc/coredns/zones/1.0.10.in-addr.arpa.db
-    log
-    errors
-    cache 30
+    # Allow configuration reload
     reload
 }

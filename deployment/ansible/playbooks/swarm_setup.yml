@@ -15,8 +15,9 @@
         - "Manager node: {{ manager_node }}"
         - "Is manager: {{ inventory_hostname == manager_node }}"
         - "Manager IP: {{ hostvars[manager_node].ansible_host | default(manager_node) }}"
+        - "Worker IP: {{ hostvars[first_worker].ansible_host | default(first_worker) }}"
         
-  # Docker setup tasks remain the same
+  # Docker setup tasks
   - name: Remove old Docker versions
     apt:
       name:
@@ -38,11 +39,14 @@
         - python3
         - python3-pip
         - lsb-release
+        - wget
+        - netcat-openbsd
+        - dnsutils
       state: present
       update_cache: yes
 
   # Install monitoring tools
-  - name: Install monitoring tools (htop, ctop, etc)
+  - name: Install monitoring tools
     apt:
       name:
         - htop
@@ -153,14 +157,7 @@
     when: inventory_hostname != manager_node
     ignore_errors: yes
 
-  # Copy configuration files 
-  - name: Copy stack.yml to manager
-    copy:
-      src: ../../swarm/stack.yml
-      dest: /home/{{ ansible_ssh_user }}/stack.yml
-    delegate_to: "{{ manager_node }}"
-    run_once: true 
-    
+  # Create necessary directories on manager
   - name: Create DNS directory structure on manager
     file:
       path: /home/{{ ansible_ssh_user }}/dns/zones
@@ -169,6 +166,30 @@
     delegate_to: "{{ manager_node }}"
     run_once: true
 
+  - name: Create database directory structure on manager
+    file:
+      path: /home/{{ ansible_ssh_user }}/database/postgresql
+      state: directory
+      mode: '0755'
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Create database directory structure for pgbouncer on manager
+    file:
+      path: /home/{{ ansible_ssh_user }}/database/pgbouncer
+      state: directory
+      mode: '0755'
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  # Copy configuration files
+  - name: Copy stack.yml to manager
+    copy:
+      src: ../../swarm/stack.yml
+      dest: /home/{{ ansible_ssh_user }}/stack.yml
+    delegate_to: "{{ manager_node }}"
+    run_once: true 
+
   - name: Copy Corefile to manager
     copy:
       src: ../roles/networking/Corefile
@@ -176,71 +197,96 @@
     delegate_to: "{{ manager_node }}"
     run_once: true
 
-  - name: Copy forward zone file to manager
+  - name: Copy PostgreSQL pg_hba.conf to manager
     copy:
-      src: ../roles/networking/zones/cpplanta.duckdns.org.db
-      dest: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-    
-  - name: Copy reverse zone file to manager
-    copy:
-      src: ../roles/networking/zones/1.0.10.in-addr.arpa.db
-      dest: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
+      src: ../roles/database/postgresql/pg_hba.conf
+      dest: /home/{{ ansible_ssh_user }}/database/postgresql/pg_hba.conf
     delegate_to: "{{ manager_node }}"
     run_once: true
 
-  - name: Update forward zone file with manager IP
+  - name: Copy PgBouncer configuration to manager
+    copy:
+      src: ../roles/database/pgbouncer/pgbouncer.ini
+      dest: /home/{{ ansible_ssh_user }}/database/pgbouncer/pgbouncer.ini
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Copy PgBouncer userlist to manager
+    copy:
+      src: ../roles/database/pgbouncer/userlist.txt
+      dest: /home/{{ ansible_ssh_user }}/database/pgbouncer/userlist.txt
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  # Update IP addresses in configuration files
+  - name: Get manager node IP address
+    shell: hostname -I | awk '{print $1}'
+    register: manager_ip
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Get worker node IP address
+    shell: hostname -I | awk '{print $1}'
+    register: worker_ip
+    delegate_to: "{{ first_worker }}"
+    run_once: true
+
+  - name: Update Corefile with actual IP addresses
     replace:
-      path: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
+      path: /home/{{ ansible_ssh_user }}/dns/Corefile
       regexp: '10\.0\.1\.10'
-      replace: "{{ manager_node }}"  # Manager node IP
+      replace: "{{ manager_ip.stdout }}"
     delegate_to: "{{ manager_node }}"
     run_once: true
 
-  - name: Update forward zone file with worker IP
+  - name: Update Corefile with worker IP address
     replace:
-      path: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
+      path: /home/{{ ansible_ssh_user }}/dns/Corefile
       regexp: '10\.0\.1\.20'
-      replace: "{{ first_worker }}"  # Worker node IP
+      replace: "{{ worker_ip.stdout }}"
     delegate_to: "{{ manager_node }}"
     run_once: true
 
-  # Parse IP addresses for reverse DNS
-  - name: Extract IP octets for reverse DNS
-    set_fact:
-      manager_ip_octets: "{{ groups['instance1'][0].split('.') }}"
-      worker_ip_octets: "{{ groups['instance2'][0].split('.') }}"
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-
-  - name: Update reverse zone file origin
-    replace:
-      path: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
-      regexp: '1\.0\.10\.in-addr\.arpa'
-      replace: "{{ manager_ip_octets[2] }}.{{ manager_ip_octets[1] }}.{{ manager_ip_octets[0] }}.in-addr.arpa"
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-
-  - name: Update reverse zone manager IP
-    replace:
-      path: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
-      regexp: '10\s+IN\s+PTR'
-      replace: "{{ manager_ip_octets[3] }} IN PTR"
-    delegate_to: "{{ manager_node }}"
-    run_once: true
-
-  - name: Update reverse zone worker IP
-    replace:
-      path: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
-      regexp: '20\s+IN\s+PTR'
-      replace: "{{ worker_ip_octets[3] }} IN PTR"
+  # Create a healthcheck script on manager node
+  - name: Create healthcheck script on manager
+    copy:
+      dest: /home/{{ ansible_ssh_user }}/healthcheck.sh
+      content: |
+        #!/bin/bash
+        # Simple healthcheck script to verify service status
+        
+        check_service() {
+          local service=$1
+          local status=$(docker service ls --format '{{.Name}} {{.Replicas}}' | grep $service)
+          if [[ "$status" == *"0/1"* ]]; then
+            echo "$service is not running correctly"
+            return 1
+          else
+            echo "$service is running"
+            return 0
+          fi
+        }
+        
+        # Check core services
+        services=("CP-Planta_traefik" "CP-Planta_dns" "CP-Planta_postgres_primary" "CP-Planta_pgbouncer")
+        
+        for service in "${services[@]}"; do
+          if ! check_service $service; then
+            echo "Restarting $service..."
+            docker service update --force $service
+            sleep 20
+          fi
+        done
+        
+        # Final report
+        docker service ls
+      mode: '0755'
     delegate_to: "{{ manager_node }}"
     run_once: true
 
   # Deploy the stack
   - name: Deploy the stack on manager
-    shell: docker stack deploy --with-registry-auth --resolve-image always -c /home/{{ ansible_ssh_user }}/stack.yml CP-Planta
+    shell: docker stack deploy --with-registry-auth -c /home/{{ ansible_ssh_user }}/stack.yml CP-Planta
     args:
       chdir: /home/{{ ansible_ssh_user }}
     delegate_to: "{{ manager_node }}"
@@ -250,13 +296,15 @@
     pause:
       seconds: 60
 
+  # Check service status
   - name: Check service status
     command: docker service ls
     register: service_status
     delegate_to: "{{ manager_node }}"
     run_once: true
 
-  - name: Restart DNS service if not running
+  # First start core services if they're not running
+  - name: Start DNS service if not running
     shell: docker service update --force CP-Planta_dns
     delegate_to: "{{ manager_node }}"
     run_once: true
@@ -267,14 +315,61 @@
       seconds: 30
     when: "'0/1' in service_status.stdout and 'CP-Planta_dns' in service_status.stdout"
 
+  # Now start database services
+  - name: Start PostgreSQL service if not running
+    shell: docker service update --force CP-Planta_postgres_primary
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+    when: "'0/1' in service_status.stdout and 'CP-Planta_postgres_primary' in service_status.stdout"
+
+  - name: Wait for PostgreSQL to become available
+    pause:
+      seconds: 30
+    when: "'0/1' in service_status.stdout and 'CP-Planta_postgres_primary' in service_status.stdout"
+
+  # Then start PgBouncer
+  - name: Start PgBouncer service if not running
+    shell: docker service update --force CP-Planta_pgbouncer
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+    when: "'0/1' in service_status.stdout and 'CP-Planta_pgbouncer' in service_status.stdout"
+
+  - name: Wait for PgBouncer to become available
+    pause:
+      seconds: 30
+    when: "'0/1' in service_status.stdout and 'CP-Planta_pgbouncer' in service_status.stdout"
+
+  # Finally start application services
+  - name: Start backend service if not running
+    shell: docker service update --force CP-Planta_backend
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+    when: "'0/1' in service_status.stdout and 'CP-Planta_backend' in service_status.stdout"
+
+  - name: Start frontend service if not running
+    shell: docker service update --force CP-Planta_frontend
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+    when: "'0/1' in service_status.stdout and 'CP-Planta_frontend' in service_status.stdout"
+
+  # Get final status
   - name: Show service status
     command: docker service ls
     delegate_to: "{{ manager_node }}"
     run_once: true
-    register: service_status
+    register: final_service_status
     ignore_errors: yes
   
   - name: Display service status
     debug:
-      var: service_status.stdout_lines
-    when: service_status is defined
+      var: final_service_status.stdout_lines
+    when: final_service_status is defined
+
+  # Add a cron job to run the healthcheck script periodically
+  - name: Add healthcheck cron job on manager
+    cron:
+      name: "Docker Swarm Service Healthcheck"
+      minute: "*/15"
+      job: "/home/{{ ansible_ssh_user }}/healthcheck.sh >> /home/{{ ansible_ssh_user }}/healthcheck.log 2>&1"
+    delegate_to: "{{ manager_node }}"
+    run_once: true

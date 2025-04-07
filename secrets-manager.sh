@@ -141,7 +141,7 @@ function create_template {
 
     cat > "$SECRETS_TEMPLATE_FILE" << 'EOL'
 # Azure Provider Credentials
-AZURE_SUBSCRIPTION_ID=your_azure_subscription_id # must have access to the Azure
+AZURE_SUBSCRIPTION_ID=your_azure_subscription_id
 
 # Database Configuration
 POSTGRES_USER=postgres

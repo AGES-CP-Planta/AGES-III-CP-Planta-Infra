@@ -51,33 +51,53 @@ services:
       retries: 3
       start_period: 30s
 
-  # PostgreSQL Primary Node
-  postgres_primary:
-    image: norohim/postgres-optimal:latest
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - POSTGRES_DB=${POSTGRES_DB:-postgres}
-      - ROLE=primary
-      - NODE_ID=1
-      - NODE_NAME=primary
-      - NODE_HOST=${PRIMARY_HOST:-postgres_primary}
+  # DNS Service - Simplified configuration
+  dns:
+    image: coredns/coredns:1.9.3
+    command: -conf /etc/coredns/Corefile
     volumes:
-      - postgres_primary_data:/var/lib/postgresql/data
+      - ./dns/Corefile:/etc/coredns/Corefile
     networks:
       - backend_network
+      - frontend_network
+      - traefik_network
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
     deploy:
       replicas: 1
       placement:
         constraints:
           - node.role == manager
+      restart_policy:
+        condition: any
+        delay: 5s
+        max_attempts: 3
       resources:
         limits:
-          cpus: '0.50'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '0.20'
+          memory: 128M
+      labels:
+        - "traefik.enable=false"
+
+  # PostgreSQL Primary Node
+  postgres_primary:
+    image: norohim/postgres-optimal
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
+    volumes:
+      - postgres_primary_data:/var/lib/postgresql/data
+      - ./database/postgresql/pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf
+    networks:
+      - backend_network
+    command: postgres -c "listen_addresses=*" -c "max_connections=200" -c "wal_level=replica"
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
       restart_policy:
         condition: any
         delay: 10s
@@ -85,18 +105,16 @@ services:
       update_config:
         order: start-first
         failure_action: rollback
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
       labels:
         - "traefik.enable=false"
     ports:
       - "${POSTGRES_PRIMARY_PORT:-5432}:5432"
     healthcheck:
-      test: [
-        "CMD-SHELL", 
-        "pg_isready -U postgres && \
-        psql -U postgres -c \"SELECT 1 FROM pg_replication_slots WHERE slot_name = 'replication_slot';\" | grep -q 1 || \
-        psql -U postgres -c \"SELECT pg_create_physical_replication_slot('replication_slot', true);\" && \
-        psql -U postgres -c \"SHOW wal_level\" | grep -q \"replica\""
-      ]      
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -104,59 +122,45 @@ services:
 
   # PostgreSQL Replica Node
   postgres_replica:
-    image: norohim/postgres-optimal:latest
+    image: norohim/postgres-optimal
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
-      - ROLE=replica
-      - NODE_ID=2
-      - NODE_NAME=replica
-      - NODE_HOST=${REPLICA_HOST:-postgres_replica}
-      - REPLICATE_FROM=${PRIMARY_HOST:-postgres_primary}
     volumes:
       - postgres_replica_data:/var/lib/postgresql/data
-      - ./dns_wait.sh:/usr/local/bin/dns_wait.sh
     networks:
       - backend_network
     deploy:
-      replicas: 1
+      replicas: 0
       placement:
         constraints:
           - node.role == worker
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 256M
       restart_policy:
         condition: any
         delay: 10s
         max_attempts: 5
       labels:
         - "traefik.enable=false"
-    entrypoint: ["/bin/sh", "-c", "chmod +x /usr/local/bin/dns_wait.sh && /usr/local/bin/dns_wait.sh && sleep 60 && postgres-entrypoint.sh"]
     ports:
       - "${POSTGRES_REPLICA_PORT:-5433}:5432"
-    depends_on:
-      - postgres_primary
     healthcheck:
-      test: [
-        "CMD-SHELL", 
-        "pg_isready -U postgres && \
-        psql -U postgres -c \"SELECT pg_is_in_recovery();\" | grep -q t && \
-        psql -U postgres -c \"SELECT state FROM pg_stat_wal_receiver;\" | grep -q \"streaming\""
-      ]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 60s  # Longer start period to allow replication setup
+      start_period: 60s
 
   # PgBouncer Connection Pooler
   pgbouncer:
-    image: norohim/pgbouncer:latest
+    image: edoburu/pgbouncer:latest
+    environment:
+      - DB_USER=${POSTGRES_USER:-postgres}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - DB_HOST=postgres_primary
+      - DB_NAME=${POSTGRES_DB:-postgres}
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=200
     networks:
       - backend_network
     deploy:
@@ -164,60 +168,35 @@ services:
       placement:
         constraints:
           - node.role == manager
+      restart_policy:
+        condition: any
+        delay: 5s
       resources:
         limits:
           cpus: '0.30'
           memory: 256M
-        reservations:
-          cpus: '0.10'
-          memory: 128M
-      restart_policy:
-        condition: any
-        delay: 5s
       labels:
         - "traefik.enable=false"
-    entrypoint: ["/bin/sh", "-c", "chmod +x /usr/local/bin/dns_wait.sh && /usr/local/bin/dns_wait.sh && sleep 90 && pgbouncer /etc/pgbouncer/pgbouncer.ini"]
     ports:
       - "${PGBOUNCER_PORT:-6432}:6432"
     depends_on:
       - postgres_primary
-      - postgres_replica
-    healthcheck:
-      test: [
-        "CMD-SHELL",
-        "echo \"SHOW POOLS;\" | psql -h 127.0.0.1 -p 6432 -U postgres pgbouncer | grep -q postgres"
-      ]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
 
   backend:
     image: norohim/cp-planta-backend:latest
     environment:
-    - NODE_ENV=production
-    # Main database connection (read-write)
-    - DB_HOST=pgbouncer
-    - DB_PORT=6432
-    - DB_USER=${POSTGRES_USER:-postgres}
-    - DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-    - DB_NAME=${POSTGRES_DB:-postgres}
-    - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-postgres}
-    # Read-only database connection
-    - DB_RO_HOST=pgbouncer
-    - DB_RO_PORT=6432
-    - DB_RO_USER=${POSTGRES_USER:-postgres}
-    - DB_RO_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-    - DB_RO_NAME=postgres_ro
-    - DATABASE_RO_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/postgres_ro
-    volumes:
-      - ./dns_wait.sh:/usr/local/bin/dns_wait.sh
+      - NODE_ENV=production
+      # Direct connection to PostgreSQL
+      - DB_HOST=postgres_primary
+      - DB_PORT=5432
+      - DB_USER=${POSTGRES_USER:-postgres}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - DB_NAME=${POSTGRES_DB:-postgres}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres_primary:5432/${POSTGRES_DB:-postgres}
     networks:
       - backend_network
       - traefik_network
-    depends_on:
-      - pgbouncer
-      - postgres_primary
+    command: node /app/dist/main.js
     deploy:
       replicas: 1
       placement:
@@ -245,7 +224,6 @@ services:
         - "traefik.http.routers.backend.entrypoints=websecure"
         - "traefik.http.routers.backend.tls.certresolver=myresolver"
         - "traefik.http.services.backend.loadbalancer.server.port=${BACKEND_PORT:-3000}"
-    entrypoint: ["sleep 120 && node /app/dist/main.js"]
     ports:
       - "${BACKEND_PORT:-3000}:${BACKEND_PORT:-3000}"
     healthcheck:
@@ -254,17 +232,17 @@ services:
       timeout: 10s
       retries: 3
       start_period: 90s
+    depends_on:
+      - postgres_primary
         
   pgadmin:
-    image: norohim/pgadmin:latest
+    image: dpage/pgadmin4:latest
     environment:
-      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL:-sacilotto.andre@gmail.com}
-      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD:-SecurePassword123}
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD:-admin}
       - PGADMIN_LISTEN_PORT=${PGADMIN_LISTEN_PORT:-5050}
     depends_on:
-      - pgbouncer
       - postgres_primary
-      - postgres_replica
     networks:
       - backend_network
       - traefik_network
@@ -307,8 +285,6 @@ services:
     networks:
       - frontend_network
       - traefik_network
-    depends_on:
-      - backend
     deploy:
       replicas: 1
       placement:
@@ -339,47 +315,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-
-  dns:
-    image: coredns/coredns:1.9.3
-    command: -conf /etc/coredns/Corefile
-    volumes:
-      - ./dns/Corefile:/etc/coredns/Corefile
-      - ./dns/zones:/etc/coredns/zones
-    networks:
-      - backend_network
-      - frontend_network
-      - traefik_network
-    deploy:
-      replicas: 1
-      placement:
-        constraints:
-          - node.role == manager
-      resources:
-        limits:
-          cpus: '0.20'
-          memory: 128M
-        reservations:
-          cpus: '0.05'
-          memory: 64M
-      restart_policy:
-        condition: any
-        delay: 5s
-        max_attempts: 5
-      update_config:
-        order: start-first
-        failure_action: rollback
-      labels:
-        - "traefik.enable=false"
-    ports:
-      - "53:53/udp"
-      - "53:53/tcp"
-    healthcheck:
-      test: ["CMD", "dig", "@127.0.0.1", "${DOMAIN_NAME:-cpplanta.duckdns.org}"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
 
   duckdns:
     image: linuxserver/duckdns:latest
