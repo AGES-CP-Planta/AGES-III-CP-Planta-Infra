@@ -219,7 +219,6 @@ services:
         condition: any
         delay: 10s
         max_attempts: 5
-        failure_action: rollback
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.backend.rule=Host(`api.${DOMAIN_NAME:-cpplanta.duckdns.org}`)"
