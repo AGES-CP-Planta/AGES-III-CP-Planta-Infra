@@ -52,7 +52,7 @@ services:
 
   # DNS Service - Simplified configuration
   dns:
-    image: coredns/coredns:1.9.3
+    image: norohim/coredns:latest
     environment:
       - TZ=${TZ:-America/Sao_Paulo}
       - MANAGER_IP=${MANAGER_IP:-10.0.1.10}
@@ -272,7 +272,7 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin 
     healthcheck:
-      test: ["CMD", "dig", "@127.0.0.1", "api.cpplanta.duckdns.org"]
+      test: ["CMD", "dig", "@127.0.0.1", "pgadmin.cpplanta.duckdns.org"]
       interval: 15s
       timeout: 5s
       retries: 3

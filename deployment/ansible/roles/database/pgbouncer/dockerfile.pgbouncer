@@ -6,7 +6,6 @@ COPY userlist.txt /etc/pgbouncer/userlist.txt
 
 # Add a custom entrypoint script
 COPY entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Setup environment variables with defaults
 ENV DB_HOST=postgres_primary \
