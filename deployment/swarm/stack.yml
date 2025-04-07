@@ -86,9 +86,10 @@ services:
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - POSTGRES_DB=${POSTGRES_DB:-postgres}
       - ROLE=primary
-      - PGDATA=/var/lib/postgresql/data
+      - NODE_ID=1
+      - NODE_NAME=primary
+      - NODE_HOST=postgres_primary
     volumes:
       - postgres_primary_data:/var/lib/postgresql/data
       - /var/lib/postgresql/data/custom-entrypoint.sh:/docker-entrypoint.sh
@@ -217,10 +218,6 @@ services:
         condition: any
         delay: 10s
         max_attempts: 5
-      update_config:
-        parallelism: 1
-        delay: 10s
-        order: start-first
         failure_action: rollback
       labels:
         - "traefik.enable=true"
@@ -303,10 +300,6 @@ services:
           memory: 128M
       restart_policy:
         condition: any
-      update_config:
-        parallelism: 1
-        delay: 10s
-        order: start-first
       labels:
         - "traefik.enable=true"
         - "traefik.http.routers.frontend.rule=Host(`${DOMAIN_NAME:-cpplanta.duckdns.org}`)"

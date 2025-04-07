@@ -132,10 +132,8 @@ The repository is organized as follows:
 ├── check-existing-resources.sh
 ├── deploy.sh
 ├── destroy.sh
-├── prepare_configs.sh
 ├── save-terraform-state.sh
-├── secrets-manager.sh
-└── update-deployment.sh
+└── secrets-manager.sh
 ```
 
 ## Deployment Options

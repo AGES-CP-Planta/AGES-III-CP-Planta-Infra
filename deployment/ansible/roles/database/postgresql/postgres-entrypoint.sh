@@ -1,6 +1,24 @@
 #!/bin/bash
 set -e
 
+# Replace env vars in config files at runtime
+envsubst < /etc/postgresql/postgresql.conf.template > "$PGDATA/postgresql.conf"
+envsubst < /etc/postgresql/pg_hba.conf.template > "$PGDATA/pg_hba.conf"
+
+# Add health check logic
+wait_for_postgres() {
+  local retries=30
+  while ! pg_isready -h "$1" -U "$POSTGRES_USER"; do
+    ((retries--))
+    if [ $retries -eq 0 ]; then
+      echo "Timeout waiting for PostgreSQL"
+      exit 1
+    fi
+    echo "Waiting for PostgreSQL..."
+    sleep 2
+  done
+}
+
 # Function to replace environment variables in configuration files
 replace_env_vars() {
     local file=$1
