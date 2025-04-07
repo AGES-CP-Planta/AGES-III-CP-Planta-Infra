@@ -140,16 +140,16 @@ services:
     depends_on:
       - postgres_primary
     healthcheck:
-    test: [
-      "CMD-SHELL", 
-      "pg_isready -U postgres && \
-      psql -U postgres -c \"SELECT pg_is_in_recovery();\" | grep -q t && \
-      psql -U postgres -c \"SELECT state FROM pg_stat_wal_receiver;\" | grep -q \"streaming\""
-    ]
-    interval: 10s
-    timeout: 5s
-    retries: 5
-    start_period: 60s  # Longer start period to allow replication setup
+      test: [
+        "CMD-SHELL", 
+        "pg_isready -U postgres && \
+        psql -U postgres -c \"SELECT pg_is_in_recovery();\" | grep -q t && \
+        psql -U postgres -c \"SELECT state FROM pg_stat_wal_receiver;\" | grep -q \"streaming\""
+      ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s  # Longer start period to allow replication setup
 
   # PgBouncer Connection Pooler
   pgbouncer:
@@ -179,14 +179,14 @@ services:
       - postgres_primary
       - postgres_replica
     healthcheck:
-    test: [
-      "CMD-SHELL",
-      "echo \"SHOW POOLS;\" | psql -h 127.0.0.1 -p 6432 -U postgres pgbouncer | grep -q postgres"
-    ]
-    interval: 10s
-    timeout: 5s
-    retries: 3
-    start_period: 30s
+      test: [
+        "CMD-SHELL",
+        "echo \"SHOW POOLS;\" | psql -h 127.0.0.1 -p 6432 -U postgres pgbouncer | grep -q postgres"
+      ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   backend:
     image: norohim/cp-planta-backend:latest

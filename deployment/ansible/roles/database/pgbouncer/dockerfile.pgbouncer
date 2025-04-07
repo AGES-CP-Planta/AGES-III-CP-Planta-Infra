@@ -1,12 +1,8 @@
 FROM edoburu/pgbouncer:latest
 
-USER root
-RUN apk add --no-cache postgresql-client
-
 COPY pgbouncer/pgbouncer.ini /etc/pgbouncer/pgbouncer.ini
 COPY pgbouncer/userlist.txt /etc/pgbouncer/userlist.txt
 COPY ./dns_wait.sh /usr/local/bin/dns_wait.sh
 
-RUN chmod +x /usr/local/bin/dns_wait.sh
 
 EXPOSE 6432
