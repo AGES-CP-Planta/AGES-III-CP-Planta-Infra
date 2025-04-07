@@ -82,6 +82,9 @@ services:
         condition: any
         delay: 10s
         max_attempts: 5
+      update_config:
+        order: start-first
+        failure_action: rollback
       labels:
         - "traefik.enable=false"
     ports:
@@ -134,7 +137,7 @@ services:
         max_attempts: 5
       labels:
         - "traefik.enable=false"
-    entrypoint: ["/bin/sh", "-c", "chmod +x /usr/local/bin/dns_wait.sh && /usr/local/bin/dns_wait.sh && sleep 30 && postgres-entrypoint.sh"]
+    entrypoint: ["/bin/sh", "-c", "chmod +x /usr/local/bin/dns_wait.sh && /usr/local/bin/dns_wait.sh && sleep 60 && postgres-entrypoint.sh"]
     ports:
       - "${POSTGRES_REPLICA_PORT:-5433}:5432"
     depends_on:
@@ -173,6 +176,7 @@ services:
         delay: 5s
       labels:
         - "traefik.enable=false"
+    entrypoint: ["/bin/sh", "-c", "chmod +x /usr/local/bin/dns_wait.sh && /usr/local/bin/dns_wait.sh && sleep 90 && pgbouncer /etc/pgbouncer/pgbouncer.ini"]
     ports:
       - "${PGBOUNCER_PORT:-6432}:6432"
     depends_on:
@@ -241,7 +245,7 @@ services:
         - "traefik.http.routers.backend.entrypoints=websecure"
         - "traefik.http.routers.backend.tls.certresolver=myresolver"
         - "traefik.http.services.backend.loadbalancer.server.port=${BACKEND_PORT:-3000}"
-    entrypoint: ["/bin/sh", "-c", "chmod +x /usr/local/bin/dns_wait.sh && /usr/local/bin/dns_wait.sh && node /app/dist/main.js"]
+    entrypoint: ["sleep 120 && node /app/dist/main.js"]
     ports:
       - "${BACKEND_PORT:-3000}:${BACKEND_PORT:-3000}"
     healthcheck:
@@ -360,6 +364,11 @@ services:
           memory: 64M
       restart_policy:
         condition: any
+        delay: 5s
+        max_attempts: 5
+      update_config:
+        order: start-first
+        failure_action: rollback
       labels:
         - "traefik.enable=false"
     ports:

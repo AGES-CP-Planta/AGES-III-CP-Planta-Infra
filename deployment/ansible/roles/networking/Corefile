@@ -2,6 +2,8 @@
     forward . 8.8.8.8 8.8.4.4
     log
     errors
+    cache 30
+    reload
 }
 
 cpplanta.duckdns.org:53 {
@@ -11,10 +13,14 @@ cpplanta.duckdns.org:53 {
     }
     log
     errors
+    cache 30
+    reload
 }
 
 1.0.10.in-addr.arpa:53 {
     file /etc/coredns/zones/1.0.10.in-addr.arpa.db
     log
     errors
+    cache 30
+    reload
 }

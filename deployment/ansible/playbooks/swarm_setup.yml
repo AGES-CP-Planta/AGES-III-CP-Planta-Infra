@@ -246,9 +246,26 @@
     delegate_to: "{{ manager_node }}"
     run_once: true
 
-  - name: Wait for 45 seconds to show proper service status
-    wait_for:
-      timeout: 35
+  - name: Wait for services to start up
+    pause:
+      seconds: 60
+
+  - name: Check service status
+    command: docker service ls
+    register: service_status
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Restart DNS service if not running
+    shell: docker service update --force CP-Planta_dns
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+    when: "'0/1' in service_status.stdout and 'CP-Planta_dns' in service_status.stdout"
+
+  - name: Wait for DNS to become available
+    pause:
+      seconds: 30
+    when: "'0/1' in service_status.stdout and 'CP-Planta_dns' in service_status.stdout"
 
   - name: Show service status
     command: docker service ls

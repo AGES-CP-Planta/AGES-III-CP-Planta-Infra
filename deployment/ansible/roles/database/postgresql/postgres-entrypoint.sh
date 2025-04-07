@@ -100,6 +100,16 @@ EOF
     touch "$PGDATA/standby.signal"
 }
 
+# Wait for DNS service to be ready
+echo "Verifying DNS service availability..."
+if [[ -x /usr/local/bin/dns_wait.sh ]]; then
+  /usr/local/bin/dns_wait.sh
+fi
+
+# Ensure pg_hba.conf has right permissions and settings
+cp /etc/postgresql/pg_hba.conf "$PGDATA/" || true
+chmod 600 "$PGDATA/pg_hba.conf" || true
+
 # Main entrypoint logic
 if [[ "$ROLE" == "primary" ]]; then
     echo "Configuring node as PRIMARY"
