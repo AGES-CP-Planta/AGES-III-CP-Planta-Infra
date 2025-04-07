@@ -1,0 +1,11 @@
+FROM coredns/coredns:1.9.3
+
+COPY Corefile /etc/coredns/Corefile.template
+COPY zones/ /etc/coredns/zones/
+
+COPY dns-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/dns-entrypoint.sh
+
+EXPOSE 53/udp 53/tcp
+
+ENTRYPOINT ["/usr/local/bin/dns-entrypoint.sh"]

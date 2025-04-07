@@ -45,15 +45,19 @@ services:
         - "traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_DASHBOARD_USER:-admin}:${TRAEFIK_DASHBOARD_PASSWORD_HASH:-$$apr1$$uyBtMQYo$$TMK6XINUQz.mLxjdJsl1j.}"
         - "traefik.http.services.traefik-svc.loadbalancer.server.port=8080"
     healthcheck:
-      test: ["CMD", "traefik", "healthcheck", "--ping"]
-      interval: 10s
+      test: ["CMD", "dig", "@127.0.0.1", "traefik.cpplanta.duckdns.org"]
+      interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 30s
 
   # DNS Service - Simplified configuration
   dns:
     image: coredns/coredns:1.9.3
+    environment:
+      - TZ=${TZ:-America/Sao_Paulo}
+      - MANAGER_IP=${MANAGER_IP:-10.0.1.10}
+      - WORKER_IP=${WORKER_IP:-10.0.1.20}
+      - DOMAIN_NAME=${DOMAIN_NAME:-cpplanta.duckdns.org}
     command: -conf /etc/coredns/Corefile
     volumes:
       - ./dns/Corefile:/etc/coredns/Corefile
@@ -92,7 +96,6 @@ services:
       - NODE_HOST=postgres_primary
     volumes:
       - postgres_primary_data:/var/lib/postgresql/data
-      - /var/lib/postgresql/data/custom-entrypoint.sh:/docker-entrypoint.sh
     command: ["/docker-entrypoint.sh"]
     networks:
       - backend_network
@@ -228,11 +231,10 @@ services:
     ports:
       - "${BACKEND_PORT:-3000}:${BACKEND_PORT:-3000}"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${BACKEND_PORT:-3000}/api/health"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "dig", "@127.0.0.1", "api.cpplanta.duckdns.org"]
+      interval: 15s
+      timeout: 5s
       retries: 3
-      start_period: 90s
     depends_on:
       - postgres_primary
         
@@ -270,11 +272,10 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin 
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${PGADMIN_LISTEN_PORT:-5050}/misc/ping"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "dig", "@127.0.0.1", "api.cpplanta.duckdns.org"]
+      interval: 15s
+      timeout: 5s
       retries: 3
-      start_period: 30s
 
   frontend:
     image: norohim/cp-planta-frontend:latest
@@ -307,11 +308,10 @@ services:
         - "traefik.http.routers.frontend.tls.certresolver=myresolver"
         - "traefik.http.services.frontend.loadbalancer.server.port=${FRONTEND_PORT:-3001}"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${FRONTEND_PORT:-3001}"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "dig", "@127.0.0.1", "cpplanta.duckdns.org"]
+      interval: 15s
+      timeout: 5s
       retries: 3
-      start_period: 30s
 
   duckdns:
     image: linuxserver/duckdns:latest
@@ -363,11 +363,10 @@ services:
         - "traefik.http.routers.visualizer.tls.certresolver=myresolver"
         - "traefik.http.services.visualizer.loadbalancer.server.port=8080"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD", "dig", "@127.0.0.1", "viz.cpplanta.duckdns.org"]
+      interval: 15s
+      timeout: 5s
       retries: 3
-      start_period: 10s
 
 networks:
   backend_network:

@@ -228,7 +228,65 @@
     delegate_to: "{{ manager_node }}"
     run_once: true
 
-  ## TODO: add task to update forwward and reverse dns files with actual IP addresses
+  - name: Update forward DNS file with actual manager IP address
+    replace:
+      path: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
+      regexp: '10\.0\.1\.10'
+      replace: "{{ manager_ip.stdout }}"
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Update forward DNS file with actual worker IP address
+    replace:
+      path: /home/{{ ansible_ssh_user }}/dns/zones/cpplanta.duckdns.org.db
+      regexp: '10\.0\.1\.20'
+      replace: "{{ worker_ip.stdout }}"
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Update reverse DNS file with actual manager IP
+    replace:
+      path: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
+      regexp: '10\.0\.1\.10'
+      replace: "{{ manager_ip.stdout }}"
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Update reverse DNS file with actual worker IP
+    replace:
+      path: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
+      regexp: '10\.0\.1\.20'
+      replace: "{{ worker_ip.stdout }}"
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Extract last octet of manager IP for reverse DNS
+    set_fact:
+      manager_last_octet: "{{ manager_ip.stdout.split('.')[-1] }}"
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Extract last octet of worker IP for reverse DNS
+    set_fact:
+      worker_last_octet: "{{ worker_ip.stdout.split('.')[-1] }}"
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Update reverse DNS records with correct octets
+    replace:
+      path: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
+      regexp: '^10\s+IN\s+PTR'
+      replace: "{{ manager_last_octet }} IN PTR"
+    delegate_to: "{{ manager_node }}"
+    run_once: true
+
+  - name: Update reverse DNS records with correct octets for worker
+    replace:
+      path: /home/{{ ansible_ssh_user }}/dns/zones/1.0.10.in-addr.arpa.db
+      regexp: '^20\s+IN\s+PTR'
+      replace: "{{ worker_last_octet }} IN PTR"
+    delegate_to: "{{ manager_node }}"
+    run_once: true
 
   # Deploy the stack
   - name: Deploy the stack on manager
