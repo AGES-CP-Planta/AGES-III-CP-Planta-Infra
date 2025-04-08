@@ -233,9 +233,17 @@ function update_dns_and_verify_services {
     MANAGER_KEY=$(realpath "ssh_keys/instance1.pem")
     
     echo -e "${YELLOW}Updating DNS records with public IP...${NC}"
-    # Get the actual public IP from the EC2 instance
-    PUBLIC_IP="$(ssh $SSH_OPTS -i $MANAGER_KEY ubuntu@$MANAGER_IP "curl -s https://api.ipify.org")"
-    
+
+    # Get the actual public IP from the EC2 
+    # For AWS
+    if [[ "$PROVIDER" == "aws" ]]; then
+        PUBLIC_IP=$(aws ec2 describe-addresses --filters "Name=instance-id,Values=$(ssh $SSH_OPTS -i $MANAGER_KEY ubuntu@$MANAGER_IP "curl -s http://169.254.169.254/latest/meta-data/instance-id")" --query 'Addresses[0].PublicIp' --output text)
+    # For Azure
+    elif [[ "$PROVIDER" == "azure" ]]; then
+        az network public-ip list --resource-group cp-planta-ages --query "[].{Name:name,IPAddress:ipAddress}" -o table
+        PUBLIC_IP=$(az network public-ip show --name cp-planta-public-ip-instance1 --resource-group cp-planta-ages --query ipAddress -o tsv)
+    fi    
+
     # Source the environment for DuckDNS token
     source .env
     
@@ -246,19 +254,36 @@ function update_dns_and_verify_services {
     DNS_UPDATE_FAILED=0
     for DOMAIN in "${DOMAINS[@]}"; do
         echo -e "${YELLOW}Updating $DOMAIN.duckdns.org...${NC}"
-        UPDATE_RESULT="$(curl -s https://www.duckdns.org/update?domains=$DOMAIN&token=$DUCKDNS_TOKEN&ip=$PUBLIC_IP)"
         
-        if [ "$UPDATE_RESULT" = "OK" ]; then
-            echo -e "${GREEN}Successfully updated $DOMAIN.duckdns.org to point to $PUBLIC_IP${NC}"
-        else
-            echo -e "${RED}Failed to update $DOMAIN.duckdns.org: $UPDATE_RESULT${NC}"
+        # Try multiple times with backoff
+        for attempt in {1..3}; do
+            UPDATE_RESULT="$(curl -s "https://www.duckdns.org/update?domains=$DOMAIN&token=$DUCKDNS_TOKEN&ip=$PUBLIC_IP")"
+            
+            if [ "$UPDATE_RESULT" = "OK" ]; then
+                echo -e "${GREEN}Successfully updated $DOMAIN.duckdns.org to point to $PUBLIC_IP${NC}"
+                break
+            else
+                echo -e "${YELLOW}Attempt $attempt failed to update $DOMAIN.duckdns.org: $UPDATE_RESULT${NC}"
+                sleep 5
+            fi
+        done
+        
+        if [ "$UPDATE_RESULT" != "OK" ]; then
+            echo -e "${RED}Failed to update $DOMAIN.duckdns.org after multiple attempts${NC}"
             DNS_UPDATE_FAILED=1
         fi
     done
     
     # Wait for DNS propagation
-    echo -e "${YELLOW}Waiting for DNS propagation (60 seconds)...${NC}"
-    sleep 30
+    echo -e "${YELLOW}Waiting for DNS propagation (100 seconds)...${NC}"
+    for i in {1..100}; do
+        echo -n "."
+        sleep 1
+        if (( i % 20 == 0 )); then
+            echo " $i seconds"
+        fi
+    done
+    echo ""
     
     # Test HTTP endpoints
     SERVICE_CHECK_FAILED=0
@@ -280,8 +305,8 @@ function update_dns_and_verify_services {
                     echo -e "${RED}✗ Failed to connect to $domain after $max_retries attempts.${NC}"
                     SERVICE_CHECK_FAILED=1
                 else
-                    echo -e "${YELLOW}Retrying in 15 seconds (attempt $retry_count/$max_retries)...${NC}"
-                    sleep 5
+                    echo -e "${YELLOW}Retrying in 10 seconds (attempt $retry_count/$max_retries)...${NC}"
+                    sleep 10
                 fi
             fi
         done

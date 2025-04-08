@@ -208,9 +208,9 @@
     delegate_to: "{{ manager_node }}"
     run_once: true
 
-  - name: Wait for services to start up
+  - name: Wait for services to start up (100 seconds)
     pause:
-      seconds: 60
+      seconds: 100
 
   # Check service status
   - name: Check service status
