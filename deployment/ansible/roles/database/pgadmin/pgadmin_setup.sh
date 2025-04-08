@@ -17,21 +17,21 @@ SERVER_CONFIGS=(
   '{
     "name": "CP-Planta DB (PgBouncer)",
     "group": "Servers",
-    "host": "pgbouncer",
-    "port": 6432,
-    "username": "postgres",
-    "password": "postgres",
-    "maintenance_db": "postgres",
+    "host": "'${DB_HOST_BOUNCER:-pgbouncer}'",
+    "port": '${DB_PORT_BOUNCER:-6432}',
+    "username": "'${DB_USERNAME:-postgres}'",
+    "password": "'${DB_PASSWORD:-postgres}'",
+    "maintenance_db": "'${DB_DATABASE:-postgres}'",
     "comment": "Connection through PgBouncer"
   }'
   '{
     "name": "PostgreSQL Primary",
     "group": "Servers",
-    "host": "postgres_primary",
-    "port": 5432,
-    "username": "postgres",
-    "password": "postgres",
-    "maintenance_db": "postgres",
+    "host": "'${DB_HOST_PRIMARY:-postgres_primary}'",
+    "port": '${DB_PORT_PRIMARY:-5432}',
+    "username": "'${DB_USERNAME:-postgres}'",
+    "password": "'${DB_PASSWORD:-postgres}'",
+    "maintenance_db": "'${DB_DATABASE:-postgres}'",
     "comment": "Direct connection to Primary"
   }'
 )

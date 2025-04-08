@@ -45,10 +45,11 @@ services:
         - "traefik.http.middlewares.auth.basicauth.users=${TRAEFIK_DASHBOARD_USER:-admin}:${TRAEFIK_DASHBOARD_PASSWORD_HASH:-$$apr1$$uyBtMQYo$$TMK6XINUQz.mLxjdJsl1j.}"
         - "traefik.http.services.traefik-svc.loadbalancer.server.port=8080"
     healthcheck:
-      test: ["CMD", "dig", "@127.0.0.1", "traefik.cpplanta.duckdns.org"]
-      interval: 15s
+      test: ["CMD", "wget", "--no-verbose", "--spider", "http://localhost:8080/ping"]
+      interval: 10s
       timeout: 5s
       retries: 3
+      start_period: 5s
 
   # DNS Service - Simplified configuration
   dns:
@@ -81,6 +82,12 @@ services:
           memory: 128M
       labels:
         - "traefik.enable=false"
+    healthcheck:
+      test: ["CMD", "dig", "@127.0.0.1", "localhost", "+short"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
 
   # PostgreSQL Primary Node
   postgres_primary:
@@ -111,14 +118,14 @@ services:
         failure_action: rollback
       resources:
         limits:
-          cpus: '0.50'
-          memory: 512M
+          cpus: '0.75'
+          memory: 768M
       labels:
         - "traefik.enable=false"
     ports:
       - "${POSTGRES_PRIMARY_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -148,10 +155,13 @@ services:
         max_attempts: 5
       labels:
         - "traefik.enable=false"
+    depends_on:
+      condition: service_healthy
+      - postgres_primary
     ports:
       - "${POSTGRES_REPLICA_PORT:-5433}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres} && psql -U ${POSTGRES_USER:-postgres} -c 'SELECT pg_is_in_recovery();' | grep 't'"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -186,19 +196,26 @@ services:
     ports:
       - "${PGBOUNCER_PORT:-6432}:6432"
     depends_on:
+      condition: service_healthy
       - postgres_primary
+    healthcheck:
+      test: ["CMD-SHELL", "PGPASSWORD=${DB_PASSWORD:-postgres} psql -h 127.0.0.1 -p 6432 -U ${DB_USER:-postgres} -c 'SELECT 1;'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   backend:
     image: norohim/cp-planta-backend:latest
     environment:
       - NODE_ENV=production
-      # Direct connection to PostgreSQL
-      - DB_HOST=postgres_primary
-      - DB_PORT=5432
+      # Use PgBouncer for connection pooling
+      - DB_HOST=pgbouncer
+      - DB_PORT=6432
       - DB_USER=${POSTGRES_USER:-postgres}
       - DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - DB_NAME=${POSTGRES_DB:-postgres}
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres_primary:5432/${POSTGRES_DB:-postgres}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-postgres}
     networks:
       - backend_network
       - traefik_network
@@ -217,7 +234,7 @@ services:
           memory: 192M
       restart_policy:
         condition: any
-        delay: 10s
+        delay: 30s
         max_attempts: 5
       labels:
         - "traefik.enable=true"
@@ -228,11 +245,14 @@ services:
     ports:
       - "${BACKEND_PORT:-3000}:${BACKEND_PORT:-3000}"
     healthcheck:
-      test: ["CMD", "dig", "@127.0.0.1", "api.cpplanta.duckdns.org"]
+      test: ["CMD-SHELL", "curl -f http://localhost:${BACKEND_PORT:-3000}/api/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
+      start_period: 20s
     depends_on:
+      condition: service_healthy
+      - pgbouncer
       - postgres_primary
         
   pgadmin:
@@ -241,8 +261,21 @@ services:
       - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
       - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD:-admin}
       - PGADMIN_LISTEN_PORT=${PGADMIN_LISTEN_PORT:-5050}
+      # Add database connection configurations
+      # Connection details for primary, replica, and pgbouncer
+      - DB_HOST_PRIMARY=postgres_primary
+      - DB_PORT_PRIMARY=5432
+      - DB_HOST_REPLICA=postgres_replica
+      - DB_PORT_REPLICA=5432
+      - DB_HOST_BOUNCER=pgbouncer
+      - DB_PORT_BOUNCER=6432
+      - DB_USERNAME=${POSTGRES_USER:-postgres}
+      - DB_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - DB_DATABASE=${POSTGRES_DB:-postgres}
     depends_on:
+      condition: service_healthy
       - postgres_primary
+      - pgbouncer
     networks:
       - backend_network
       - traefik_network
@@ -269,18 +302,18 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin 
     healthcheck:
-      test: ["CMD", "dig", "@127.0.0.1", "pgadmin.cpplanta.duckdns.org"]
-      interval: 15s
-      timeout: 5s
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:${PGADMIN_LISTEN_PORT:-5050}/misc/ping || exit 1"]
+      interval: 30s
+      timeout: 10s
       retries: 3
+      start_period: 30s
 
   frontend:
     image: norohim/cp-planta-frontend:latest
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://api.cpplanta.duckdns.org}
+      - NEXT_PUBLIC_API_URL=https://api.${DOMAIN_NAME:-cpplanta.duckdns.org}
       - PORT=${FRONTEND_PORT:-3001}
-      - API_URL=https://api.${DOMAIN_NAME:-cpplanta.duckdns.org}
     networks:
       - frontend_network
       - traefik_network
@@ -304,11 +337,15 @@ services:
         - "traefik.http.routers.frontend.entrypoints=websecure"
         - "traefik.http.routers.frontend.tls.certresolver=myresolver"
         - "traefik.http.services.frontend.loadbalancer.server.port=${FRONTEND_PORT:-3001}"
-    healthcheck:
-      test: ["CMD", "dig", "@127.0.0.1", "cpplanta.duckdns.org"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
+      healthcheck:
+        test: ["CMD-SHELL", "curl -f http://localhost:${FRONTEND_PORT:-3001} || exit 1"]
+        interval: 15s
+        timeout: 5s
+        retries: 3
+        start_period: 20s
+      depends_on:
+        condition: service_healthy
+        - backend
 
   duckdns:
     image: linuxserver/duckdns:latest
@@ -337,7 +374,7 @@ services:
       labels:
         - "traefik.enable=false"
     healthcheck:
-      test: ["CMD", "curl", "-f", "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN:-cpplanta}&token=${DUCKDNS_TOKEN}&ip="]
+      test: ["CMD-SHELL", "curl -s 'https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN:-cpplanta}&token=${DUCKDNS_TOKEN}&verbose=true' | grep 'OK' || exit 1"]
       interval: 1800s
       timeout: 30s
       retries: 3
@@ -360,10 +397,11 @@ services:
         - "traefik.http.routers.visualizer.tls.certresolver=myresolver"
         - "traefik.http.services.visualizer.loadbalancer.server.port=8080"
     healthcheck:
-      test: ["CMD", "dig", "@127.0.0.1", "viz.cpplanta.duckdns.org"]
-      interval: 15s
-      timeout: 5s
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080 || exit 1"]
+      interval: 30s
+      timeout: 20s
       retries: 3
+      start_period: 10s
 
 networks:
   backend_network:
