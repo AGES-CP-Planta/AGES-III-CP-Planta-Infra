@@ -1,0 +1,19 @@
+.:53 {
+    forward . 8.8.8.8 8.8.4.4
+    errors
+    cache 30
+    reload
+}
+
+cpplanta.duckdns.org:53 {
+    file /zones/cpplanta.duckdns.org.db
+    log
+    errors
+    reload
+}
+
+10.0.1.0.in-addr.arpa:53 {
+    file /zones/1.0.10.in-addr.arpa.db
+    log
+    errors
+}

@@ -59,7 +59,8 @@ services:
       - MANAGER_IP={{ manager_ip }}
       - WORKER_IP={{ worker_ip }}
       - DOMAIN_NAME=${DOMAIN_NAME:-cpplanta.duckdns.org}
-    command: -conf /etc/coredns/Corefile
+    volumes:
+      - ./zones:/zones
     networks:
       - backend_network
       - frontend_network
@@ -100,8 +101,7 @@ services:
       - NODE_NAME=primary
       - NODE_HOST=postgres_primary
     volumes:
-      - postgres_primary_data:/var/lib/postgresql/data
-    command: ["/docker-entrypoint.sh"]
+      - /tmp/pgdata_primary:/var/lib/postgresql/data
     networks:
       - backend_network
     deploy:
@@ -141,7 +141,7 @@ services:
       - ROLE=replica
       - REPLICATE_FROM=postgres_primary
     volumes:
-      - postgres_replica_data:/var/lib/postgresql/data
+      - /tmp/pgdata_replica:/var/lib/postgresql/data
     networks:
       - backend_network
     deploy:
@@ -414,10 +414,6 @@ networks:
     driver: overlay
 
 volumes:
-  postgres_primary_data:
-    driver: local
-  postgres_replica_data:
-    driver: local
   pgadmin_data:
     driver: local
   traefik_data:

@@ -1,10 +1,9 @@
-FROM coredns/coredns:1.9.3
+FROM coredns/coredns:1.11.1
 
-COPY Corefile /etc/coredns/Corefile.template
+# Copy configuration files directly
+COPY Corefile /etc/coredns/Corefile
 COPY zones/ /etc/coredns/zones/
 
-COPY ./coredns/dns-entrypoint.sh /usr/local/bin/
-
-EXPOSE 53/udp 53/tcp
-
-ENTRYPOINT ["/usr/local/bin/dns-entrypoint.sh"]
+# Use direct 
+ENTRYPOINT ["/coredns"]
+CMD ["-conf", "/etc/coredns/Corefile"]
