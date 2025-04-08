@@ -3,7 +3,7 @@ FROM coredns/coredns:1.9.3
 COPY Corefile /etc/coredns/Corefile.template
 COPY zones/ /etc/coredns/zones/
 
-COPY coredns/dns-entrypoint.sh /usr/local/bin/
+COPY ./coredns/dns-entrypoint.sh /usr/local/bin/
 
 EXPOSE 53/udp 53/tcp
 

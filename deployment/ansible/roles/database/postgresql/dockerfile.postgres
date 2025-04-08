@@ -1,5 +1,8 @@
 FROM postgres:15.4-alpine
 
+# Install gettext-base for envsubst
+RUN apk add --no-cache gettext
+
 # Copy configuration files and scripts
 COPY postgresql.conf /etc/postgresql/postgresql.conf.template
 COPY pg_hba.conf /etc/postgresql/pg_hba.conf.template
