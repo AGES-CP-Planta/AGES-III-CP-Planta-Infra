@@ -60,7 +60,7 @@ services:
       - WORKER_IP={{ worker_ip }}
       - DOMAIN_NAME=${DOMAIN_NAME:-cpplanta.duckdns.org}
     volumes:
-      - ./zones:/zones
+      - ./zones:/etc/coredns/zones
     networks:
       - backend_network
       - frontend_network
@@ -101,7 +101,7 @@ services:
       - NODE_NAME=primary
       - NODE_HOST=postgres_primary
     volumes:
-      - /tmp/pgdata_primary:/var/lib/postgresql/data
+      - postgres_primary_data:/var/lib/postgresql/data
     networks:
       - backend_network
     deploy:
@@ -141,7 +141,7 @@ services:
       - ROLE=replica
       - REPLICATE_FROM=postgres_primary
     volumes:
-      - /tmp/pgdata_replica:/var/lib/postgresql/data
+      - postgres_primary_data:/var/lib/postgresql/data  # Use named volume instead of /tmp
     networks:
       - backend_network
     deploy:
@@ -158,14 +158,13 @@ services:
     ports:
       - "${POSTGRES_REPLICA_PORT:-5433}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres} && psql -U ${POSTGRES_USER:-postgres} -c 'SELECT pg_is_in_recovery();' | grep 't'"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"] 
+      interval: 30s  
+      timeout: 10s   
+      retries: 10    
+      start_period: 120s  
     depends_on:
       - postgres_primary
-
 
   # PgBouncer Connection Pooler
   pgbouncer:
@@ -186,7 +185,8 @@ services:
           - node.role == manager
       restart_policy:
         condition: any
-        delay: 5s
+        delay: 30s
+        max_attempts: 10
       resources:
         limits:
           cpus: '0.30'
@@ -197,10 +197,10 @@ services:
       - "${PGBOUNCER_PORT:-6432}:6432"
     healthcheck:
       test: ["CMD-SHELL", "PGPASSWORD=${DB_PASSWORD:-postgres} psql -h 127.0.0.1 -p 6432 -U ${DB_USER:-postgres} -c 'SELECT 1;'"]
-      interval: 10s
+      interval: 30s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 60s
     depends_on:   
       - postgres_primary
 
@@ -232,8 +232,8 @@ services:
           cpus: '0.20'
           memory: 192M
       restart_policy:
-        condition: any
-        delay: 30s
+        condition: on-failure
+        delay: 60s
         max_attempts: 5
       labels:
         - "traefik.enable=true"
@@ -414,6 +414,10 @@ networks:
     driver: overlay
 
 volumes:
+  postgres_primary_data:
+    driver: local
+  postgres_replica_data:
+    driver: local
   pgadmin_data:
     driver: local
   traefik_data:
