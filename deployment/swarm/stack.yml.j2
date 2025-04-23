@@ -83,12 +83,6 @@ services:
           memory: 128M
       labels:
         - "traefik.enable=false"
-    healthcheck:
-      test: ["CMD", "dig", "@127.0.0.1", "localhost", "+short"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
 
   # PostgreSQL Primary Node
   postgres_primary:
@@ -125,12 +119,6 @@ services:
         - "traefik.enable=false"
     ports:
       - "${POSTGRES_PRIMARY_PORT:-5432}:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-postgres}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
   # PostgreSQL Replica Node
   postgres_replica:
@@ -159,12 +147,6 @@ services:
         - "traefik.enable=false"
     ports:
       - "${POSTGRES_REPLICA_PORT:-5433}:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"] 
-      interval: 30s  
-      timeout: 10s   
-      retries: 10    
-      start_period: 120s  
     depends_on:
       - postgres_primary
 
@@ -197,12 +179,6 @@ services:
         - "traefik.enable=false"
     ports:
       - "${PGBOUNCER_PORT:-6432}:6432"
-    healthcheck:
-      test: ["CMD-SHELL", "PGPASSWORD=${DB_PASSWORD:-postgres} psql -h 127.0.0.1 -p 6432 -U ${DB_USER:-postgres} -c 'SELECT 1;'"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
     depends_on:   
       - postgres_primary
 
@@ -244,12 +220,6 @@ services:
         - "traefik.http.services.backend.loadbalancer.server.port=${BACKEND_PORT:-3000}"
     ports:
       - "${BACKEND_PORT:-3000}:${BACKEND_PORT:-3000}"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:${BACKEND_PORT:-3000}/api/health || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
     depends_on:
       - pgbouncer
       - postgres_primary
@@ -297,12 +267,6 @@ services:
         - "traefik.http.services.pgadmin.loadbalancer.server.port=${PGADMIN_LISTEN_PORT:-5050}"
     volumes:
       - pgadmin_data:/var/lib/pgadmin 
-    healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:${PGADMIN_LISTEN_PORT:-5050}/misc/ping || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
     depends_on: 
       - postgres_primary
       - pgbouncer
@@ -338,12 +302,6 @@ services:
         - "traefik.http.routers.frontend.entrypoints=websecure"
         - "traefik.http.routers.frontend.tls.certresolver=myresolver"
         - "traefik.http.services.frontend.loadbalancer.server.port=${FRONTEND_PORT:-3001}"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:${FRONTEND_PORT:-3001} || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
     depends_on:
       - backend
 
@@ -375,12 +333,6 @@ services:
         max_attempts: 5
       labels:
         - "traefik.enable=false"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -s 'https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN:-cpplanta}&token=${DUCKDNS_TOKEN}&verbose=true' | grep 'OK' || exit 1"]
-      interval: 1800s
-      timeout: 30s
-      retries: 3
-      start_period: 10s
 
   visualizer:
     image: dockersamples/visualizer:latest
