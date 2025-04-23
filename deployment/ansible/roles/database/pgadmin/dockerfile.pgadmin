@@ -1,26 +1,7 @@
 FROM dpage/pgadmin4:latest
 
-# Switch to root to install necessary packages
-USER root
-RUN apk update && apk add --no-cache curl bash
-
 # Copy the script to the container
-COPY pgadmin_setup.sh /app/scripts/pgadmin_setup.sh
-RUN chmod +x /app/scripts/pgadmin_setup.sh
-
-# Create a directory for server configuration
-RUN mkdir -p /pgadmin4/servers
-
-# Switch back to the pgadmin user for running PgAdmin
-USER pgadmin
-
-# Set environment variables for default login
-ENV PGADMIN_DEFAULT_EMAIL=fulano@gmail.com
-ENV PGADMIN_DEFAULT_PASSWORD=abc123
-ENV PGADMIN_LISTEN_PORT=5050
-ENV PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION=False
-ENV PGADMIN_CONFIG_SERVER_MODE=True
+COPY pgadmin_setup.sh /opt/pgadmin_setup.sh
 
 # Start PgAdmin and run the setup script
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["python", "/pgadmin4/pgadmin4.py"]
+ENTRYPOINT ["/bin/bash", "/opt/pgadmin_setup.sh"]

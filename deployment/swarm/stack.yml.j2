@@ -19,7 +19,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "${TRAEFIK_DASHBOARD_PORT:-8090}:8080"  # Expose Traefik dashboard on a different host port
+      - "${TRAEFIK_DASHBOARD_PORT:-8090}:8080"
     volumes:
       - traefik_data:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -100,6 +100,7 @@ services:
       - NODE_ID=1
       - NODE_NAME=primary
       - NODE_HOST=postgres_primary
+      - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:
       - postgres_primary_data:/var/lib/postgresql/data
     networks:
@@ -140,8 +141,9 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-postgres}
       - ROLE=replica
       - REPLICATE_FROM=postgres_primary
+      - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:
-      - postgres_primary_data:/var/lib/postgresql/data  # Use named volume instead of /tmp
+      - postgres_replica_data:/var/lib/postgresql/data  
     networks:
       - backend_network
     deploy:
@@ -151,7 +153,7 @@ services:
           - node.role == worker
       restart_policy:
         condition: any
-        delay: 10s
+        delay: 30s
         max_attempts: 5
       labels:
         - "traefik.enable=false"
@@ -208,7 +210,6 @@ services:
     image: norohim/cp-planta-backend:latest
     environment:
       - NODE_ENV=production
-      # Use PgBouncer for connection pooling
       - DB_HOST=pgbouncer
       - DB_PORT=6432
       - DB_USER=${POSTGRES_USER:-postgres}
@@ -260,7 +261,6 @@ services:
       - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD:-admin}
       - PGADMIN_LISTEN_PORT=${PGADMIN_LISTEN_PORT:-5050}
       # Add database connection configurations
-      # Connection details for primary, replica, and pgbouncer
       - DB_HOST_PRIMARY=postgres_primary
       - DB_PORT_PRIMARY=5432
       - DB_HOST_REPLICA=postgres_replica
